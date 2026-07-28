@@ -1,0 +1,58 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --color-primary: #1B4B66;
+  --color-primary-light: #2A6B8F;
+  --color-accent: #2FA88A;
+  --color-accent-light: #48C3A4;
+  --color-surface: #F7F9FA;
+  --color-text: #16232B;
+  --color-muted: #8B9BA5;
+  --color-success: #2FA88A;
+
+  @keyframes scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+}
+
+.animate-scroll {
+  animation: scroll 40s linear infinite;
+}
+
+/* Base custom resets to guarantee rich readability and beautiful layouts */
+body {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom animation for drifting medical-skin dot grid of our hero background */
+@keyframes gridDrift {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(40px, 40px);
+  }
+}
+
+.animate-grid-drift {
+  animation: gridDrift 20s linear infinite;
+}
+
+/* Playfair Display font utility — used for headings across all sections */
+.font-playfair {
+  font-family: var(--font-serif), 'Playfair Display', Georgia, serif;
+}
+
+/* Hide scrollbar for horizontal scroll containers (BeforeAfter mobile) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
