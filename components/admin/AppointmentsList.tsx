@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import type { Booking, PaymentStatus, BookingStatus } from '@/lib/types';
 import { 
   CheckCircle2, XCircle, UserCheck, UserX, Search, Filter, 
-  Calendar, Phone, CreditCard, ChevronDown, CheckSquare, Clock, FileText, RefreshCw, MessageCircle 
+  Calendar, Phone, CreditCard, ChevronDown, CheckSquare, Clock, FileText, RefreshCw, MessageCircle, Video 
 } from 'lucide-react';
 
 interface AppointmentsListProps {
@@ -63,6 +63,106 @@ export default function AppointmentsList({
         patientName: patientName || 'Patient',
         action: action === 'confirm' ? 'Confirmed' : 'Rescheduled',
       });
+    }
+  };
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleOnlinePayment = async (
+    id: string,
+    action: string,
+    nextScheduleDate?: string,
+    rescheduleDate?: string,
+    rescheduleTime?: string,
+    rescheduleReason?: string,
+    patientName?: string,
+    patientPhone?: string
+  ) => {
+    try {
+      const payRes = await fetch('/api/appointments/pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receipt: id }),
+      });
+
+      if (!payRes.ok) {
+        throw new Error('Payment gateway order creation failed');
+      }
+
+      const payData = await payRes.json();
+
+      if (payData.isMock) {
+        const verifyRes = await fetch('/api/appointments/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_order_id: payData.orderId,
+            razorpay_payment_id: 'mock_payment',
+            razorpay_signature: 'mock_signature',
+            bookingId: id,
+            isMock: true,
+          }),
+        });
+        if (!verifyRes.ok) throw new Error('Mock payment verification failed');
+      } else {
+        const loaded = await loadRazorpayScript();
+        if (!loaded) throw new Error('Failed to load payment checkout script');
+
+        await new Promise((resolve, reject) => {
+          const options = {
+            key: payData.keyId,
+            amount: payData.amount,
+            currency: payData.currency,
+            name: 'Skin Hub Clinic',
+            description: `OPD Consultation - ${patientName}`,
+            order_id: payData.orderId,
+            handler: async (response: any) => {
+              try {
+                const verifyRes = await fetch('/api/appointments/verify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature,
+                    bookingId: id,
+                  }),
+                });
+                if (!verifyRes.ok) throw new Error('Verification failed');
+                resolve(true);
+              } catch (err) {
+                reject(err);
+              }
+            },
+            prefill: {
+              name: patientName,
+              contact: patientPhone,
+            },
+            theme: {
+              color: '#1B4F72',
+            },
+            modal: {
+              ondismiss: () => {
+                reject(new Error('Payment cancelled'));
+              }
+            }
+          };
+          const rzp = new (window as any).Razorpay(options);
+          rzp.open();
+        });
+      }
+
+      await handleActionWithWA(id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason, patientName, 'online');
+    } catch (err: any) {
+      alert(err.message || 'Payment failed');
     }
   };
 
@@ -300,7 +400,7 @@ export default function AppointmentsList({
                 onClick={async () => {
                   const bk = paymentPromptBooking;
                   setPaymentPromptBooking(null);
-                  await handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name, 'online');
+                  await handleOnlinePayment(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name, bk.phone);
                 }}
                 className="py-3 px-4 rounded-xl text-xs font-bold border border-blue-250 bg-blue-50 text-blue-800 flex items-center justify-center gap-2 cursor-pointer hover:bg-blue-100 transition-all outline-none"
               >
@@ -408,9 +508,16 @@ export default function AppointmentsList({
               <div className="space-y-2">
                 {/* Header line: status + payment badges */}
                 <div className="flex justify-between items-start gap-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {getStatusBadge(bk.status)}
                     {getPaymentBadge(bk.paymentStatus)}
+                    {bk.source === 'walk-in' ? (
+                      <span className="px-2 py-0.5 rounded bg-gray-150 border border-gray-300 text-gray-700 text-[10px] font-bold uppercase tracking-wider">🚶 Walk-in</span>
+                    ) : bk.bookingType === 'online' ? (
+                      <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wider">🌐 Online Video</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-250 text-amber-800 text-[10px] font-bold uppercase tracking-wider">🏥 Clinic Visit</span>
+                    )}
                   </div>
                   <span className="font-mono text-[9px] font-black text-gray-400 bg-white border px-2 py-0.5 rounded shadow-2xs">
                     {bk.id}
@@ -474,6 +581,15 @@ export default function AppointmentsList({
                       {bk.razorpayOrderId && <p>Order ID: <span className="font-mono text-gray-500">{bk.razorpayOrderId}</span></p>}
                       {bk.razorpayPaymentId && <p>Transaction ID: <span className="font-mono text-gray-500">{bk.razorpayPaymentId}</span></p>}
                       {bk.paidAt && <p>Paid At: <span className="text-gray-500">{new Date(bk.paidAt).toLocaleString()}</span></p>}
+                    </div>
+                  )}
+
+                  {/* Telemedicine Details section */}
+                  {bk.bookingType === 'online' && bk.meetingLink && (
+                    <div className="bg-teal-50/20 border border-teal-100 p-2.5 rounded-xl text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-2 text-left">
+                      <p className="text-[9px] uppercase font-black tracking-widest text-teal-700">Video Consultation Link:</p>
+                      <p>Meeting URL: <a href={bk.meetingLink} target="_blank" rel="noopener noreferrer" className="text-[#1B4F72] hover:underline font-bold">{bk.meetingLink}</a></p>
+                      {bk.meetingPassword && <p>Password: <span className="font-bold text-gray-900">{bk.meetingPassword}</span></p>}
                     </div>
                   )}
 
@@ -631,8 +747,30 @@ export default function AppointmentsList({
                     </button>
                   )}
 
-                  {/* Arrived Checked In */}
-                  {(bk.status === 'confirmed' || bk.status === 'booked') && (
+                  {/* Verify Payment for pending online bookings */}
+                  {bk.bookingType === 'online' && bk.status === 'pending' && bk.paymentStatus === 'pending' && bk.razorpayPaymentLinkId && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = (await onAction(bk.id, 'verify-payment-link')) as any;
+                          if (res && res.paid) {
+                            alert('Payment verified as Paid! Slot has been confirmed and video consultation meeting link generated.');
+                            onRefresh();
+                          } else {
+                            alert(`Payment link is still unpaid (Current status: ${res?.paymentLinkStatus || 'unpaid'}).`);
+                          }
+                        } catch (err: any) {
+                          alert(err.message || 'Verification failed');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-750 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 animate-[spin_4s_linear_infinite]" /> Verify Payment
+                    </button>
+                  )}
+
+                   {/* Arrived Checked In (for offline/physical visits only) */}
+                  {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
                     <button
                       onClick={() => {
                         if (bk.paymentStatus === 'paid') {
@@ -647,8 +785,22 @@ export default function AppointmentsList({
                     </button>
                   )}
 
+                  {/* Send Meeting Link (WhatsApp) for online bookings */}
+                  {bk.bookingType === 'online' && bk.status === 'confirmed' && bk.paymentStatus === 'paid' && bk.meetingLink && (
+                    <button
+                      onClick={() => {
+                        const msg = `*Skin Hub Clinic — Online Consultation Confirmed* 🏥\n\nHello ${bk.name},\n\nYour payment has been received and your slot on ${bk.date} at ${bk.time} is successfully confirmed.\n\nPlease join your video consultation using the meeting details below:\n\nMeeting Link: ${bk.meetingLink}\nPassword: ${bk.meetingPassword || '—'}\n\nPlease join 5 minutes before your scheduled slot.`;
+                        const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                        window.open(waUrl, '_blank');
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <Video className="w-3.5 h-3.5" /> Send Meeting Link (WA)
+                    </button>
+                  )}
+
                   {/* Complete Consultation (prompts follow-up date option) */}
-                  {(bk.status === 'checked-in' || bk.status === 'arrived') && !showFollowUpInput[bk.id] && (
+                  {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online')) && !showFollowUpInput[bk.id] && (
                     <button
                       onClick={() => setShowFollowUpInput({ ...showFollowUpInput, [bk.id]: true })}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"

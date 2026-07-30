@@ -5,6 +5,7 @@ import { createBooking } from '@/lib/db/bookings';
 import type { Booking } from '@/lib/types';
 import { todayISO } from '@/lib/slots';
 import { getDb, COLLECTIONS } from '@/lib/mongodb';
+import crypto from 'crypto';
 
 /** Staff: register walk-in patient with full intake form */
 export async function POST(req: NextRequest) {
@@ -29,10 +30,38 @@ export async function POST(req: NextRequest) {
       appointmentNotes,
       time,
       paymentMethod,
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
     } = body;
 
     if (!name || !phone) {
       return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const settings = await db.collection(COLLECTIONS.settings).findOne({});
+    const fee = settings?.offlineConsultationFee || settings?.consultationFee || 200;
+
+    // Verify online payment if paymentMethod is online
+    if (paymentMethod === 'online') {
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return NextResponse.json({ error: 'Payment details are missing' }, { status: 400 });
+      }
+
+      const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET?.trim();
+      
+      const isMock = razorpay_order_id.startsWith('mock_order_') || razorpay_payment_id === 'mock_payment';
+      if (!isMock && RAZORPAY_KEY_SECRET) {
+        // Verify signature
+        const hmac = crypto.createHmac('sha256', RAZORPAY_KEY_SECRET);
+        hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
+        const generated_signature = hmac.digest('hex');
+
+        if (generated_signature !== razorpay_signature) {
+          return NextResponse.json({ error: 'Payment verification failed' }, { status: 400 });
+        }
+      }
     }
 
     const date = todayISO();
@@ -62,6 +91,9 @@ export async function POST(req: NextRequest) {
       payOnline: paymentMethod === 'online',
       paymentStatus: 'paid',
       paymentMethod: paymentMethod || 'cash',
+      razorpayOrderId: paymentMethod === 'online' ? razorpay_order_id : undefined,
+      razorpayPaymentId: paymentMethod === 'online' ? razorpay_payment_id : undefined,
+      amountPaid: paymentMethod === 'online' ? fee : undefined,
       gender: gender || 'Male',
       age: age ? Number(age) : undefined,
       address: address || '',
@@ -89,9 +121,6 @@ export async function POST(req: NextRequest) {
 
     const queue = await getDailyQueue(date);
 
-    // Get clinic settings for WhatsApp message
-    const db = await getDb();
-    const settings = await db.collection(COLLECTIONS.settings).findOne({});
     const clinicName = settings?.clinicName || 'Skin Hub Clinic';
     const clinicAddress = settings?.clinicAddress || 'Freeganj, Ujjain';
 

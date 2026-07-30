@@ -63,6 +63,14 @@ export async function getNextTokenNumber(date: string): Promise<number> {
 export async function addQueueEntry(entry: QueueEntry): Promise<QueueEntry> {
   const db = await getDb();
   const { _id, ...doc } = entry;
+
+  // Prevent duplicate queue entry for the same booking ID
+  if (doc.bookingId) {
+    const existing = await db.collection(COLLECTIONS.queue).findOne({ bookingId: doc.bookingId });
+    if (existing) {
+      return entry;
+    }
+  }
   
   // Set default priority to 0 if not present
   if (doc.priority === undefined) {

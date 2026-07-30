@@ -172,6 +172,101 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
     }
   };
 
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleOnlinePayment = async (bkId: string, bkName: string, bkPhone: string, action: string, extra?: Record<string, string>) => {
+    setLoading(true);
+    setError('');
+    try {
+      const payRes = await fetch('/api/appointments/pay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receipt: bkId }),
+      });
+
+      if (!payRes.ok) {
+        throw new Error('Payment gateway order creation failed');
+      }
+
+      const payData = await payRes.json();
+
+      if (payData.isMock) {
+        const verifyRes = await fetch('/api/appointments/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_order_id: payData.orderId,
+            razorpay_payment_id: 'mock_payment',
+            razorpay_signature: 'mock_signature',
+            bookingId: bkId,
+            isMock: true,
+          }),
+        });
+        if (!verifyRes.ok) throw new Error('Mock payment verification failed');
+      } else {
+        const loaded = await loadRazorpayScript();
+        if (!loaded) throw new Error('Failed to load payment checkout script');
+
+        await new Promise((resolve, reject) => {
+          const options = {
+            key: payData.keyId,
+            amount: payData.amount,
+            currency: payData.currency,
+            name: 'Skin Hub Clinic',
+            description: `OPD Consultation - ${bkName}`,
+            order_id: payData.orderId,
+            handler: async (response: any) => {
+              try {
+                const verifyRes = await fetch('/api/appointments/verify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature,
+                    bookingId: bkId,
+                  }),
+                });
+                if (!verifyRes.ok) throw new Error('Verification failed');
+                resolve(true);
+              } catch (err) {
+                reject(err);
+              }
+            },
+            prefill: {
+              name: bkName,
+              contact: bkPhone,
+            },
+            theme: {
+              color: '#1B4F72',
+            },
+            modal: {
+              ondismiss: () => {
+                reject(new Error('Payment cancelled'));
+              }
+            }
+          };
+          const rzp = new (window as any).Razorpay(options);
+          rzp.open();
+        });
+      }
+
+      await bookingAction(bkId, action, { paymentMethod: 'online', ...extra });
+    } catch (err: any) {
+      setError(err.message || 'Payment initiation failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── Skip patient (no-show) — skip to end means re-add at end by resetting status ──
   const handleSkip = async (booking: Booking) => {
     await bookingAction(booking.id, 'skip');
@@ -246,22 +341,80 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
     setWalkinError('');
     setWalkinResult(null);
     try {
+      let payload: any = {
+        name: wName, phone: wPhone, email: wEmail,
+        service: wService, gender: wGender, age: wAge,
+        address: wAddress, skinType: wSkinType,
+        problemDescription: wProblem,
+        previousMedication: wMedication,
+        appointmentNotes: wNotes,
+        time: wTime,
+        paymentMethod: wPaymentMethod,
+      };
+
+      if (wPaymentMethod === 'online') {
+        const payRes = await fetch('/api/appointments/pay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ receipt: 'walkin_temp_' + Date.now() }),
+        });
+
+        if (!payRes.ok) {
+          throw new Error('Payment gateway order creation failed');
+        }
+
+        const payData = await payRes.json();
+
+        if (payData.isMock) {
+          payload.razorpay_order_id = payData.orderId;
+          payload.razorpay_payment_id = 'mock_payment';
+          payload.razorpay_signature = 'mock_signature';
+        } else {
+          const loaded = await loadRazorpayScript();
+          if (!loaded) throw new Error('Failed to load payment checkout script');
+
+          const rzResult = await new Promise<any>((resolve, reject) => {
+            const options = {
+              key: payData.keyId,
+              amount: payData.amount,
+              currency: payData.currency,
+              name: 'Skin Hub Clinic',
+              description: `Walk-in Consultation - ${wName}`,
+              order_id: payData.orderId,
+              handler: (response: any) => {
+                resolve(response);
+              },
+              prefill: {
+                name: wName,
+                contact: wPhone,
+              },
+              theme: {
+                color: '#1B4F72',
+              },
+              modal: {
+                ondismiss: () => {
+                  reject(new Error('Payment cancelled'));
+                }
+              }
+            };
+            const rzp = new (window as any).Razorpay(options);
+            rzp.open();
+          });
+
+          payload.razorpay_order_id = rzResult.razorpay_order_id;
+          payload.razorpay_payment_id = rzResult.razorpay_payment_id;
+          payload.razorpay_signature = rzResult.razorpay_signature;
+        }
+      }
+
       const res = await fetch('/api/queue/walk-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: wName, phone: wPhone, email: wEmail,
-          service: wService, gender: wGender, age: wAge,
-          address: wAddress, skinType: wSkinType,
-          problemDescription: wProblem,
-          previousMedication: wMedication,
-          appointmentNotes: wNotes,
-          time: wTime,
-          paymentMethod: wPaymentMethod,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Registration failed');
+
       setWalkinResult({ token: data.tokenNumber, waUrl: data.whatsappUrl, name: wName });
       resetWalkinForm();
       fetchWalkinSlots(); // refresh slots list after booking
@@ -570,7 +723,7 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                 onClick={async () => {
                   const bk = qPaymentPromptBooking;
                   setQPaymentPromptBooking(null);
-                  await bookingAction(bk.id, 'checked-in', { paymentMethod: 'online' });
+                  await handleOnlinePayment(bk.id, bk.name, bk.phone, 'checked-in');
                   setSearchResults(prev => prev.filter(b => b.id !== bk.id));
                   setSearchQuery('');
                 }}
@@ -625,7 +778,7 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                 onClick={async () => {
                   const bk = startServingPromptBooking;
                   setStartServingPromptBooking(null);
-                  await bookingAction(bk.id, 'start-serving', { paymentMethod: 'online' });
+                  await handleOnlinePayment(bk.id, bk.name, bk.phone, 'start-serving');
                 }}
                 className="py-3 px-4 rounded-xl text-xs font-bold border border-blue-250 bg-blue-50 text-blue-800 flex items-center justify-center gap-2 cursor-pointer hover:bg-blue-100 transition-all outline-none"
               >
