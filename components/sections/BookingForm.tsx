@@ -233,41 +233,28 @@ export default function BookingForm() {
           handler: async (response: any) => {
             setLoading(true);
             try {
-              // Poll status to wait for the webhook to update it
-              let attempts = 0;
-              const maxAttempts = 10;
-              const checkStatus = async () => {
-                const statusRes = await fetch(`/api/appointments/status?id=${data.appointmentId}`);
-                if (statusRes.ok) {
-                  const statusData = await statusRes.json();
-                  if (statusData.paymentStatus === 'Paid') {
-                    setBookingResult({
-                      id: data.appointmentId,
-                      token: statusData.tokenNumber,
-                      status: statusData.status,
-                      paymentStatus: 'Paid',
-                    });
-                    return true;
-                  }
-                }
-                attempts++;
-                if (attempts < maxAttempts) {
-                  await new Promise(resolve => setTimeout(resolve, 1500));
-                  return checkStatus();
-                }
-                return false;
-              };
+              const verifyRes = await fetch('/api/appointments/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  bookingId: data.appointmentId,
+                }),
+              });
 
-              const verified = await checkStatus();
-              if (!verified) {
-                // Showing fallback message if webhook was slightly delayed
-                setBookingResult({
-                  id: data.appointmentId,
-                  status: 'Pending',
-                  paymentStatus: 'Pending',
-                });
-                setErrorText('Payment captured! We are verifying details with the gateway. Check dashboard in a few seconds.');
+              if (!verifyRes.ok) {
+                throw new Error('Payment verification failed');
               }
+
+              const verifyData = await verifyRes.json();
+              setBookingResult({
+                id: data.appointmentId,
+                token: verifyData.tokenNumber,
+                status: verifyData.status,
+                paymentStatus: 'Paid',
+              });
             } catch (err: any) {
               setErrorText(err.message || 'Payment verification failed');
             } finally {
@@ -782,23 +769,13 @@ export default function BookingForm() {
                 />
               </div>
 
-              {/* Online payment toggle banner */}
+              {/* Online payment info banner */}
               {bookingType === 'online' && (
-                <div className="p-4 bg-white border border-gray-200 rounded-xl flex items-center justify-between shadow-xs">
-                  <span className="text-xs font-bold flex items-center gap-2 text-gray-800">
-                    <CreditCard className="w-4 h-4 text-primary" />
-                    Mandatory Consultation Fee: ₹{onlineFee}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-gray-500 uppercase">Prepay UPI/Card</span>
-                    <input
-                      type="checkbox"
-                      disabled={settings?.onlinePaymentMandatory}
-                      checked={payOnline || !!settings?.onlinePaymentMandatory}
-                      onChange={(e) => setPayOnline(e.target.checked)}
-                      className="w-5 h-5 accent-primary cursor-pointer"
-                    />
-                  </div>
+                <div className="p-4 bg-[#1B4F72]/5 border border-[#1B4F72]/20 rounded-xl flex items-start gap-2.5">
+                  <CreditCard className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <p className="text-[10px] font-bold text-gray-800 uppercase tracking-wider leading-relaxed">
+                    Online consultation fee is ₹{onlineFee}. No payment is required right now. The clinic will review your request and send a payment link via WhatsApp.
+                  </p>
                 </div>
               )}
 

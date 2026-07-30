@@ -46,10 +46,17 @@ export async function POST(req: NextRequest) {
         const payId = payment.id;
         const amount = payment.amount / 100; // Razorpay sends in paise
 
-        // Find booking by Razorpay Order ID
-        const booking = await db.collection(COLLECTIONS.bookings).findOne({ razorpayOrderId: orderId });
+        // Find booking by Razorpay Order ID or Payment Link ID
+        let booking = null;
+        if (orderId) {
+          booking = await db.collection(COLLECTIONS.bookings).findOne({ razorpayOrderId: orderId });
+        }
+        if (!booking && payment.payment_link_id) {
+          booking = await db.collection(COLLECTIONS.bookings).findOne({ razorpayPaymentLinkId: payment.payment_link_id });
+        }
+
         if (!booking) {
-          console.warn(`Booking with order ID ${orderId} not found.`);
+          console.warn(`Booking with order ID ${orderId} or payment link ID ${payment.payment_link_id} not found.`);
           return NextResponse.json({ success: true, message: 'No matching booking found' });
         }
 
@@ -64,14 +71,23 @@ export async function POST(req: NextRequest) {
           paidAt: new Date().toISOString()
         } as any);
 
-        // 2. Update booking status
-        await updateBookingStatus(bookingId, nextStatus as any);
+        // 2. Update booking status and generate meeting link if online
+        let updateFields: any = { status: 'confirmed' };
+        if (booking.bookingType === 'online') {
+          const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
+          updateFields.meetingLink = `https://meet.jit.si/SkinHubClinic-${bookingId}`;
+          updateFields.meetingPassword = roomPass;
+        }
+        await db.collection(COLLECTIONS.bookings).updateOne(
+          { id: bookingId },
+          { $set: updateFields }
+        );
 
         let tokenNumber = undefined;
         const todayStr = todayISO();
 
-        // 3. Issue queue token if slot is today
-        if (booking.date === todayStr) {
+        // 3. Issue queue token if slot is today (only for offline/physical visits)
+        if (booking.date === todayStr && booking.bookingType !== 'online') {
           const { getNextTokenNumber, addQueueEntry } = await import('@/lib/db/queue');
           tokenNumber = await getNextTokenNumber(todayStr);
 

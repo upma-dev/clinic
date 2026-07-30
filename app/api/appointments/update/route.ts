@@ -29,50 +29,128 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'confirm': {
-        await updateBookingStatus(id, 'confirmed');
-        // Add to queue if confirming a pending booking
-        const { addQueueEntry: addEntry } = await import('@/lib/db/queue');
+        const confirmSettings = await getClinicSettings();
 
-        await addEntry({
-          date: booking.date,
-          name: booking.name,
-          phone: booking.phone,
-          source: booking.source || 'online',
-          bookingId: booking.id,
-          status: 'waiting',
-          estimatedWaitMinutes: 0,
-          createdAt: new Date().toISOString(),
-        });
-        
-        await createNotification(
-          'booking_new',
-          'Booking Confirmed',
-          `${booking.name}'s appointment on ${booking.date} at ${booking.time} is now confirmed.`
-        );
+        if (booking.bookingType === 'online') {
+          // If a payment link already exists in the database, reuse it to avoid duplicate API calls and reference_id errors
+          if (booking.razorpayPaymentLink && booking.razorpayPaymentLinkId) {
+            const payMsg = `*${confirmSettings.clinicName} — Online Consultation Payment Request* \n\nHello ${booking.name},\n\nYour online consultation request has been reviewed. To confirm your slot on ${booking.date} at ${booking.time}, please make the payment using this secure link:\n${booking.razorpayPaymentLink}\n\nNote: Your slot will be officially booked only after successful payment confirmation.`;
+            whatsappUrl = buildWhatsAppUrl(booking.phone, payMsg);
+            break;
+          }
 
-        if (booking.email) {
-          const { sendAutomatedEmail } = await import('@/lib/email');
-          await sendAutomatedEmail(booking.email, 'confirmed', {
+          // ONLINE CONSULTATION: Generate Razorpay Payment Link
+          const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID?.trim();
+          const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+          let paymentLinkUrl = '';
+          let paymentLinkId = '';
+
+          if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
+            const authStr = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+            const fee = confirmSettings.onlineConsultationFee || confirmSettings.consultationFee || 500;
+            
+            try {
+              const payRes = await fetch('https://api.razorpay.com/v1/payment_links', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Basic ${authStr}`
+                },
+                body: JSON.stringify({
+                  amount: fee * 100, // in paise
+                  currency: 'INR',
+                  accept_partial: false,
+                  reference_id: `${booking.id}_${Date.now()}`, // Append unique timestamp to prevent duplicate reference_id error
+                  description: `${confirmSettings.clinicName} Online Consultation Fee - ${booking.name}`,
+                  customer: {
+                    name: booking.name,
+                    contact: booking.phone.replace(/\D/g, '').slice(-10),
+                    email: booking.email || undefined
+                  },
+                  notify: {
+                    sms: false,
+                    email: false
+                  }
+                })
+              });
+
+              const payData = await payRes.json();
+              if (payRes.ok) {
+                paymentLinkUrl = payData.short_url;
+                paymentLinkId = payData.id;
+              } else {
+                console.error('Razorpay payment link creation failed:', payData);
+                throw new Error(payData.error?.description || 'Failed to create payment link');
+              }
+            } catch (err: any) {
+              console.error('Razorpay payment link API error:', err);
+              return NextResponse.json({ error: err.message || 'Payment link creation failed' }, { status: 500 });
+            }
+          } else {
+            paymentLinkId = 'mock_plink_' + Date.now();
+            paymentLinkUrl = `${req.nextUrl.origin}/telemedicine/pay-mock?bookingId=${booking.id}`;
+          }
+
+          const db = await getDb();
+          await db.collection(COLLECTIONS.bookings).updateOne(
+            { id },
+            { 
+              $set: { 
+                paymentStatus: 'pending', 
+                razorpayPaymentLink: paymentLinkUrl,
+                razorpayPaymentLinkId: paymentLinkId,
+                payOnline: true
+              } 
+            }
+          );
+
+          const payMsg = `*${confirmSettings.clinicName} — Online Consultation Payment Request* \n\nHello ${booking.name},\n\nYour online consultation request has been reviewed. To confirm your slot on ${booking.date} at ${booking.time}, please make the payment using this secure link:\n${paymentLinkUrl}\n\nNote: Your slot will be officially booked only after successful payment confirmation.`;
+          whatsappUrl = buildWhatsAppUrl(booking.phone, payMsg);
+        } else {
+          // OFFLINE CONSULTATION: Confirm immediately
+          await updateBookingStatus(id, 'confirmed');
+          const { addQueueEntry: addEntry } = await import('@/lib/db/queue');
+
+          await addEntry({
+            date: booking.date,
             name: booking.name,
+            phone: booking.phone,
+            source: booking.source || 'online',
+            bookingId: booking.id,
+            status: 'waiting',
+            estimatedWaitMinutes: 0,
+            createdAt: new Date().toISOString(),
+          });
+          
+          await createNotification(
+            'booking_new',
+            'Booking Confirmed',
+            `${booking.name}'s appointment on ${booking.date} at ${booking.time} is now confirmed.`
+          );
+
+          if (booking.email) {
+            const { sendAutomatedEmail } = await import('@/lib/email');
+            await sendAutomatedEmail(booking.email, 'confirmed', {
+              name: booking.name,
+              date: booking.date,
+              time: booking.time,
+              token: '—',
+              id: booking.id
+            }).catch(err => console.error('Failed to send confirmed email:', err));
+          }
+
+          const confirmMsg = buildConfirmationMessage({
+            clinicName: confirmSettings.clinicName,
+            patientName: booking.name,
+            appointmentId: booking.id,
             date: booking.date,
             time: booking.time,
-            token: '—',
-            id: booking.id
-          }).catch(err => console.error('Failed to send confirmed email:', err));
+            service: booking.service,
+            clinicAddress: confirmSettings.clinicAddress,
+          });
+          whatsappUrl = buildWhatsAppUrl(booking.phone, confirmMsg);
         }
-
-        // Build WhatsApp confirmation URL for admin to send to patient
-        const confirmSettings = await getClinicSettings();
-        const confirmMsg = buildConfirmationMessage({
-          clinicName: confirmSettings.clinicName,
-          patientName: booking.name,
-          appointmentId: booking.id,
-          date: booking.date,
-          time: booking.time,
-          service: booking.service,
-          clinicAddress: confirmSettings.clinicAddress,
-        });
-        whatsappUrl = buildWhatsAppUrl(booking.phone, confirmMsg);
         break;
       }
 
@@ -374,6 +452,91 @@ export async function POST(req: NextRequest) {
           `${booking.name} was moved back to waiting queue.`
         );
         break;
+
+      case 'verify-payment-link': {
+        const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID?.trim();
+        const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+        if (!booking.razorpayPaymentLinkId) {
+          return NextResponse.json({ error: 'No payment link associated with this booking' }, { status: 400 });
+        }
+
+        if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
+          const authStr = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+          try {
+            const payRes = await fetch(`https://api.razorpay.com/v1/payment_links/${booking.razorpayPaymentLinkId}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Basic ${authStr}`
+              }
+            });
+
+            const payData = await payRes.json();
+            if (!payRes.ok) {
+              throw new Error(payData.error?.description || 'Failed to fetch payment link status');
+            }
+
+            if (payData.status === 'paid') {
+              const db = await getDb();
+              
+              // Generate meeting credentials
+              const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
+              
+              await db.collection(COLLECTIONS.bookings).updateOne(
+                { id: booking.id },
+                { 
+                  $set: { 
+                    paymentStatus: 'paid',
+                    status: 'confirmed',
+                    razorpayPaymentId: payData.payments?.[0]?.payment_id || 'manual_verify',
+                    amountPaid: payData.amount_paid / 100,
+                    paidAt: new Date().toISOString(),
+                    meetingLink: `https://meet.jit.si/SkinHubClinic-${booking.id}`,
+                    meetingPassword: roomPass
+                  } 
+                }
+              );
+
+              await createNotification(
+                'payment_received',
+                'Payment Verified Manually',
+                `${booking.name}'s payment verified as Paid. Slot confirmed and video link generated.`
+              );
+
+              return NextResponse.json({ success: true, paid: true, status: 'confirmed' });
+            } else {
+              return NextResponse.json({ success: true, paid: false, paymentLinkStatus: payData.status });
+            }
+          } catch (err: any) {
+            console.error('Verify payment link API error:', err);
+            return NextResponse.json({ error: err.message || 'Verification query failed' }, { status: 500 });
+          }
+        } else {
+          // If keys are not set, check if it's mock
+          if (booking.razorpayPaymentLinkId.startsWith('mock_plink_')) {
+            const db = await getDb();
+            const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
+            
+            await db.collection(COLLECTIONS.bookings).updateOne(
+              { id: booking.id },
+              { 
+                $set: { 
+                  paymentStatus: 'paid',
+                  status: 'confirmed',
+                  razorpayPaymentId: 'mock_payment_' + Date.now(),
+                  amountPaid: 500,
+                  paidAt: new Date().toISOString(),
+                  meetingLink: `https://meet.jit.si/SkinHubClinic-${booking.id}`,
+                  meetingPassword: roomPass
+                } 
+              }
+            );
+
+            return NextResponse.json({ success: true, paid: true, status: 'confirmed' });
+          }
+          return NextResponse.json({ error: 'Razorpay keys not configured' }, { status: 500 });
+        }
+      }
 
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

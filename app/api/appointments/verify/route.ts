@@ -13,11 +13,16 @@ export async function POST(req: Request) {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, bookingId, isMock, paymentStatus } = body;
 
     const settings = await getClinicSettings();
-    const fee = settings.onlineConsultationFee || settings.consultationFee || 200;
-
     const booking = await getBookingById(bookingId);
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+
+    let fee = settings.offlineConsultationFee || settings.consultationFee || 200;
+    if (booking.bookingType === 'online' || booking.source === 'online') {
+      fee = settings.onlineConsultationFee || settings.consultationFee || 500;
+    } else {
+      fee = settings.offlineConsultationFee || settings.consultationFee || 200;
     }
 
     // Handle explicit failure notification
@@ -46,7 +51,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, paymentStatus: 'failed' });
     }
 
-    const nextStatus = settings.onlineRequiresApproval ? 'pending' : 'confirmed';
+    const nextStatus = (booking.source === 'walk-in' || !settings.onlineRequiresApproval) ? 'confirmed' : 'pending';
 
     // Helper to complete post-payment transitions (status, queue tokens, notifications)
     const completePaymentTransition = async (orderId: string, payId: string, amt: number) => {
@@ -61,10 +66,25 @@ export async function POST(req: Request) {
       // 2. Update booking status
       await updateBookingStatus(bookingId, nextStatus);
 
+      // Generate meeting details for online consultations if confirmed
+      if (booking.bookingType === 'online' && nextStatus === 'confirmed') {
+        const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const db = await getDb();
+        await db.collection(COLLECTIONS.bookings).updateOne(
+          { id: bookingId },
+          { 
+            $set: { 
+              meetingLink: `https://meet.jit.si/SkinHubClinic-${bookingId}`, 
+              meetingPassword: roomPass 
+            } 
+          }
+        );
+      }
+
       let tokenNumber = undefined;
 
-      // 3. Issue queue token if auto-confirmed
-      if (nextStatus === 'confirmed') {
+      // 3. Issue queue token if auto-confirmed (exclude online consultations)
+      if (nextStatus === 'confirmed' && booking.bookingType !== 'online') {
         const { getNextTokenNumber, addQueueEntry } = await import('@/lib/db/queue');
         tokenNumber = await getNextTokenNumber(booking.date);
         

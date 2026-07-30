@@ -77,6 +77,10 @@ export interface Booking {
   paidAt?: string;
   refundId?: string;
   refundedAt?: string;
+  razorpayPaymentLink?: string;
+  razorpayPaymentLinkId?: string;
+  meetingLink?: string;
+  meetingPassword?: string;
 }
 
 export interface DailyQueue {

@@ -43,6 +43,16 @@ export default function WalkInForm({ onRegistered }: WalkInFormProps) {
       .finally(() => setLoadingSlots(false));
   };
 
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
   useEffect(() => {
     fetchSlots();
   }, []);
@@ -58,13 +68,70 @@ export default function WalkInForm({ onRegistered }: WalkInFormProps) {
     setResult(null);
 
     try {
+      let payload: any = { name, phone, service, time, paymentMethod };
+
+      if (paymentMethod === 'online') {
+        const payRes = await fetch('/api/appointments/pay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ receipt: 'walkin_temp_' + Date.now() }),
+        });
+
+        if (!payRes.ok) {
+          throw new Error('Payment gateway order creation failed');
+        }
+
+        const payData = await payRes.json();
+
+        if (payData.isMock) {
+          payload.razorpay_order_id = payData.orderId;
+          payload.razorpay_payment_id = 'mock_payment';
+          payload.razorpay_signature = 'mock_signature';
+        } else {
+          const loaded = await loadRazorpayScript();
+          if (!loaded) throw new Error('Failed to load payment checkout script');
+
+          const rzResult = await new Promise<any>((resolve, reject) => {
+            const options = {
+              key: payData.keyId,
+              amount: payData.amount,
+              currency: payData.currency,
+              name: 'Skin Hub Clinic',
+              description: `Walk-in Consultation - ${name}`,
+              order_id: payData.orderId,
+              handler: (response: any) => {
+                resolve(response);
+              },
+              prefill: {
+                name,
+                contact: phone,
+              },
+              theme: {
+                color: '#1B4F72',
+              },
+              modal: {
+                ondismiss: () => {
+                  reject(new Error('Payment cancelled'));
+                }
+              }
+            };
+            const rzp = new (window as any).Razorpay(options);
+            rzp.open();
+          });
+
+          payload.razorpay_order_id = rzResult.razorpay_order_id;
+          payload.razorpay_payment_id = rzResult.razorpay_payment_id;
+          payload.razorpay_signature = rzResult.razorpay_signature;
+        }
+      }
+
       const res = await fetch('/api/queue/walk-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, service, time, paymentMethod }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || 'Registration failed');
 
       setResult({ token: data.tokenNumber, waUrl: data.whatsappUrl });
       setName('');

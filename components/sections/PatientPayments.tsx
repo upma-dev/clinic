@@ -100,27 +100,22 @@ export default function PatientPayments({ patient }: PatientPaymentsProps) {
         handler: async (response: any) => {
           setLoading(true);
           try {
-            // Poll status to wait for the webhook to update it
-            let attempts = 0;
-            const maxAttempts = 10;
-            const checkStatus = async () => {
-              const statusRes = await fetch(`/api/appointments/status?id=${bk.id}`);
-              if (statusRes.ok) {
-                const statusData = await statusRes.json();
-                if (statusData.paymentStatus === 'Paid') {
-                  fetchBookings();
-                  return true;
-                }
-              }
-              attempts++;
-              if (attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                return checkStatus();
-              }
-              return false;
-            };
+            const verifyRes = await fetch('/api/appointments/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                bookingId: bk.id,
+              }),
+            });
 
-            await checkStatus();
+            if (!verifyRes.ok) {
+              throw new Error('Payment verification failed');
+            }
+
+            fetchBookings();
           } catch (err: any) {
             setError(err.message || 'Payment verification failed');
           } finally {

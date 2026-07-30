@@ -32,32 +32,19 @@ export function parseHHMM(value: string): number {
 export function generateDaySlots(settings: ClinicSettings, type: 'clinic' | 'online' = 'online'): string[] {
   const slots: string[] = [];
 
-  if (type === 'online') {
-    const duration = settings.onlineSlotDuration || settings.slotDurationMinutes || 15;
-    const startMin = parseHHMM(settings.onlineStart || settings.morningStart || '10:00');
-    const endMin = parseHHMM(settings.onlineEnd || settings.eveningEnd || '18:00');
-    const breakStart = parseHHMM(settings.onlineBreakStart || settings.lunchStart || '13:00');
-    const breakEnd = parseHHMM(settings.onlineBreakEnd || settings.lunchEnd || '14:00');
+  // Use the exact same morning and evening shift ranges for both online & offline consultations
+  const duration = settings.slotDurationMinutes || 15;
+  const ranges = [
+    [parseHHMM(settings.morningStart), parseHHMM(settings.morningEnd)],
+    [parseHHMM(settings.eveningStart), parseHHMM(settings.eveningEnd)],
+  ];
+  const breakStart = parseHHMM(settings.lunchStart || '14:00');
+  const breakEnd = parseHHMM(settings.lunchEnd || '17:00');
 
-    for (let t = startMin; t < endMin; t += duration) {
-      // Exclude slots that fall during the break timing
+  for (const [start, end] of ranges) {
+    for (let t = start; t < end; t += duration) {
       if (t >= breakStart && t < breakEnd) continue;
       slots.push(minutesToTime(t));
-    }
-  } else {
-    const duration = settings.slotDurationMinutes || 15;
-    const ranges = [
-      [parseHHMM(settings.morningStart), parseHHMM(settings.morningEnd)],
-      [parseHHMM(settings.eveningStart), parseHHMM(settings.eveningEnd)],
-    ];
-    const breakStart = parseHHMM(settings.lunchStart || '14:00');
-    const breakEnd = parseHHMM(settings.lunchEnd || '17:00');
-
-    for (const [start, end] of ranges) {
-      for (let t = start; t < end; t += duration) {
-        if (t >= breakStart && t < breakEnd) continue;
-        slots.push(minutesToTime(t));
-      }
     }
   }
 

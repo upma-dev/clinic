@@ -134,9 +134,7 @@ export async function POST(req: NextRequest) {
       settings.onlineConsultationFee || settings.consultationFee || 200;
 
     // Determine if upfront payment checkout is required
-    const requiresPayment =
-      bookingType === "online" &&
-      (settings.onlinePaymentMandatory || payOnline);
+    const requiresPayment = false;
 
     // Initial booking status transitions
     // All public bookings (online or offline type) start as 'pending' and require admin approval
@@ -157,6 +155,7 @@ export async function POST(req: NextRequest) {
       time,
       message: message || "",
       payOnline: !!requiresPayment,
+      bookingType,
       status: initialStatus as any,
       source: "online",
       paymentStatus: paymentStatus as any,
