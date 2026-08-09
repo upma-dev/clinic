@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import type { Booking, PaymentStatus, BookingStatus } from '@/lib/types';
-import { 
-  CheckCircle2, XCircle, UserCheck, UserX, Search, Filter, 
-  Calendar, Phone, CreditCard, ChevronDown, ChevronRight, ChevronLeft, CheckSquare, Clock, FileText, RefreshCw, MessageCircle, Video, List, LayoutGrid 
+import {
+  CheckCircle2, XCircle, UserCheck, UserX, Search, Filter,
+  Calendar, Phone, CreditCard, ChevronDown, ChevronRight, ChevronLeft, CheckSquare, Clock, FileText, RefreshCw, MessageCircle, Video, List, LayoutGrid
 } from 'lucide-react';
 
 interface AppointmentsListProps {
@@ -415,7 +415,7 @@ export default function AppointmentsList({
           </div>
         </div>
       )}
-      
+
       {/* Top Title & Search bar row */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
@@ -444,18 +444,16 @@ export default function AppointmentsList({
           <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
             <button
               onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                viewMode === 'table' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                }`}
               title="Table List View"
             >
               <List className="w-3.5 h-3.5" /> Table List
             </button>
             <button
               onClick={() => setViewMode('cards')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                viewMode === 'cards' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'cards' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                }`}
               title="Grid Cards View"
             >
               <LayoutGrid className="w-3.5 h-3.5" /> Cards
@@ -486,17 +484,15 @@ export default function AppointmentsList({
             setActiveFilter('approval');
             setCurrentPage(1);
           }}
-          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeFilter === 'approval'
+          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${activeFilter === 'approval'
               ? 'bg-amber-500 border-amber-500 text-white'
               : 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
-          }`}
+            }`}
         >
           ⏳ Pending Approval
           {pendingApprovalCount > 0 && (
-            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-              activeFilter === 'approval' ? 'bg-white text-amber-600' : 'bg-amber-500 text-white'
-            }`}>
+            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeFilter === 'approval' ? 'bg-white text-amber-600' : 'bg-amber-500 text-white'
+              }`}>
               {pendingApprovalCount}
             </span>
           )}
@@ -519,11 +515,10 @@ export default function AppointmentsList({
               setActiveFilter(f.id as FilterType);
               setCurrentPage(1);
             }}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
-              activeFilter === f.id
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${activeFilter === f.id
                 ? 'bg-[#1B4F72] border-[#1B4F72] text-white'
                 : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-            }`}
+              }`}
           >
             {f.label}
           </button>
@@ -560,10 +555,9 @@ export default function AppointmentsList({
                       const isExpanded = expandedRowId === bk.id;
                       return (
                         <React.Fragment key={bk.id}>
-                          <tr 
-                            className={`hover:bg-blue-50/40 transition-colors ${
-                              isExpanded ? 'bg-blue-50/20' : ''
-                            }`}
+                          <tr
+                            className={`hover:bg-blue-50/40 transition-colors ${isExpanded ? 'bg-blue-50/20' : ''
+                              }`}
                           >
                             <td className="py-3.5 px-4 font-mono font-bold text-[11px] text-gray-500">
                               {bk.id}
@@ -646,7 +640,7 @@ export default function AppointmentsList({
                                   {isExpanded ? 'Hide' : 'Details'}
                                   <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                 </button>
-                              </div>
+                                </div>
                             </td>
                           </tr>
 
@@ -656,7 +650,7 @@ export default function AppointmentsList({
                               <td colSpan={8} className="p-4 bg-slate-50 border-b border-gray-200">
                                 <div className="space-y-3 font-sans text-xs">
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    
+
                                     {/* Column 1: Patient Diagnostic Details */}
                                     <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2">
                                       <p className="text-[10px] font-black uppercase text-primary tracking-wider">Patient Intake & Diagnostics</p>
@@ -767,20 +761,20 @@ export default function AppointmentsList({
 
                                   {/* Reschedule Form if open */}
                                   {showRescheduleInput[bk.id] && (
-                                    <form 
+                                    <form
                                       onSubmit={(e) => {
                                         e.preventDefault();
                                         handleActionWithWA(
-                                          bk.id, 
-                                          'reschedule', 
-                                          undefined, 
-                                          rescheduleDates[bk.id], 
-                                          rescheduleTimes[bk.id], 
+                                          bk.id,
+                                          'reschedule',
+                                          undefined,
+                                          rescheduleDates[bk.id],
+                                          rescheduleTimes[bk.id],
                                           rescheduleReasons[bk.id],
                                           bk.name
                                         );
                                         setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: false });
-                                      }} 
+                                      }}
                                       className="p-3 bg-blue-50/50 border border-blue-200 rounded-xl space-y-2 text-xs"
                                     >
                                       <p className="font-bold text-primary text-[11px]">Reschedule Appointment Slot</p>
@@ -855,140 +849,260 @@ export default function AppointmentsList({
                     })}
                 </tbody>
               </table>
-            </div>
-          ) : (
-            /* CARDS GRID VIEW */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredBookings
-                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-                .map((bk) => (
-                  <div
-                    key={bk.id}
-                    className="p-4 border border-gray-100 rounded-2xl bg-gray-50/50 hover:bg-gray-50 transition-colors flex flex-col justify-between space-y-4 shadow-2xs hover:shadow-xs"
+
+              <div className="flex flex-wrap gap-1.5">
+                {/* Confirms/Verifies booking request */}
+                {bk.status === 'pending' && (
+                  <button
+                    onClick={() => handleActionWithWA(bk.id, 'confirm', undefined, undefined, undefined, undefined, bk.name)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
                   >
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {getStatusBadge(bk.status)}
-                          {getPaymentBadge(bk.paymentStatus)}
-                          {bk.source === 'walk-in' ? (
-                            <span className="px-2 py-0.5 rounded bg-gray-150 border border-gray-300 text-gray-700 text-[10px] font-bold uppercase tracking-wider">🚶 Walk-in</span>
-                          ) : bk.bookingType === 'online' ? (
-                            <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wider">🌐 Online Video</span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-250 text-amber-800 text-[10px] font-bold uppercase tracking-wider">🏥 Clinic Visit</span>
-                          )}
-                        </div>
-                        <span className="font-mono text-[9px] font-black text-gray-400 bg-white border px-2 py-0.5 rounded shadow-2xs">
-                          {bk.id}
-                        </span>
-                      </div>
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Confirm Slot
+                  </button>
+                )}
 
-                      <div className="space-y-1 text-xs">
-                        <p className="font-bold text-gray-900 text-sm">{bk.name}</p>
-                        <p className="text-gray-600 font-semibold">
-                          {bk.date} at {bk.time} • <span className="text-primary font-bold">{bk.service}</span>
-                        </p>
-                        <p className="text-gray-500 font-semibold flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-gray-400" /> {bk.phone}
-                          {bk.email && ` • ${bk.email}`}
-                        </p>
-                        
-                        {(bk.age || bk.gender || bk.skinType) && (
-                          <p className="text-[10px] text-gray-600 font-semibold bg-white border border-gray-150 p-2 rounded-lg mt-1">
-                            {bk.age && `Age: ${bk.age}`} {bk.gender && ` • Gender: ${bk.gender}`} {bk.skinType && ` • Skin: ${bk.skinType}`}
-                          </p>
-                        )}
-                        {bk.problemDescription && (
-                          <div className="bg-white border border-gray-150 p-2.5 rounded-lg text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-1">
-                            <p className="text-[9px] uppercase font-black tracking-widest text-primary">Problem Condition:</p>
-                            <p>{bk.problemDescription}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                {/* Verify Payment for pending online bookings */}
+                {bk.bookingType === 'online' && bk.status === 'pending' && bk.paymentStatus === 'pending' && bk.razorpayPaymentLinkId && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = (await onAction(bk.id, 'verify-payment-link')) as any;
+                        if (res && res.paid) {
+                          alert('Payment verified as Paid! Slot has been confirmed and video consultation meeting link generated.');
+                          onRefresh();
+                        } else {
+                          alert(`Payment link is still unpaid (Current status: ${res?.paymentLinkStatus || 'unpaid'}).`);
+                        }
+                      } catch (err: any) {
+                        alert(err.message || 'Verification failed');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-750 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 animate-[spin_4s_linear_infinite]" /> Verify Payment
+                  </button>
+                )}
 
-                    <div className="flex flex-wrap gap-1.5 pt-2 border-t">
-                      {bk.status === 'pending' && (
-                        <button
-                          onClick={() => handleActionWithWA(bk.id, 'confirm', undefined, undefined, undefined, undefined, bk.name)}
-                          className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase"
-                        >
-                          Confirm Slot
-                        </button>
-                      )}
-                      {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
-                        <button
-                          onClick={() => {
-                            if (bk.paymentStatus === 'paid') {
-                              handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name);
-                            } else {
-                              setPaymentPromptBooking(bk);
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-[10px] font-bold uppercase"
-                        >
-                          Check In
-                        </button>
-                      )}
-                    </div>
+                {/* Arrived Checked In (for offline/physical visits only) */}
+                {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
+                  <button
+                    onClick={() => {
+                      if (bk.paymentStatus === 'paid') {
+                        handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name);
+                      } else {
+                        setPaymentPromptBooking(bk);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" /> Check In
+                  </button>
+                )}
+
+                {/* Send Meeting Link (WhatsApp) for online bookings */}
+                {bk.bookingType === 'online' && bk.status === 'confirmed' && bk.paymentStatus === 'paid' && bk.meetingLink && (
+                  <button
+                    onClick={() => {
+                      const msg = `*Skin Hub Clinic — Online Consultation Confirmed* 🏥\n\nHello ${bk.name},\n\nYour payment has been received and your slot on ${bk.date} at ${bk.time} is successfully confirmed.\n\nPlease join your video consultation using the meeting details below:\n\nMeeting Link: ${bk.meetingLink}\nPassword: ${bk.meetingPassword || '—'}\n\nPlease join 5 minutes before your scheduled slot.`;
+                      const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                      window.open(waUrl, '_blank');
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <Video className="w-3.5 h-3.5" /> Send Meeting Link (WA)
+                  </button>
+                )}
+
+                {/* Complete Consultation (prompts follow-up date option) */}
+                {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online')) && !showFollowUpInput[bk.id] && (
+                  <button
+                    onClick={() => setShowFollowUpInput({ ...showFollowUpInput, [bk.id]: true })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" /> Complete Session
+                  </button>
+                )}
+
+                {/* Reschedule Button */}
+                {bk.status !== 'cancelled' && bk.status !== 'completed' && !showRescheduleInput[bk.id] && (
+                  <button
+                    onClick={() => setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: true })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B4F72] hover:brightness-110 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <Clock className="w-3.5 h-3.5" /> Reschedule
+                  </button>
+                )}
+
+                {/* Cancel Booking */}
+                {bk.status !== 'cancelled' && bk.status !== 'completed' && (
+                  <button
+                    onClick={() => onAction(bk.id, 'cancel')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                  </button>
+                )}
+
+                {/* Refund Button */}
+                {String(bk.paymentStatus).toLowerCase() === 'paid' && bk.status !== 'Cancelled' && bk.status !== 'cancelled' && (
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to refund this payment? This will also cancel the booking.')) {
+                        onAction(bk.id, 'refund');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Refund
+                  </button>
+                )}
+
+                {/* Invoice Button */}
+                {bk.payOnline && (
+                  <button
+                    onClick={() => window.open(`/api/appointments/invoice?id=${bk.id}`, '_blank')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-150 hover:bg-gray-200 text-gray-700 border rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-gray-500" /> Invoice
+                  </button>
+                )}
+              </div>
+            </div>
+            </div>
+    </div>
+  ) : (
+    /* CARDS GRID VIEW */
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {filteredBookings
+        .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+        .map((bk) => (
+          <div
+            key={bk.id}
+            className="p-4 border border-gray-100 rounded-2xl bg-gray-50/50 hover:bg-gray-50 transition-colors flex flex-col justify-between space-y-4 shadow-2xs hover:shadow-xs"
+          >
+            <div className="space-y-2">
+              <div className="flex justify-between items-start gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {getStatusBadge(bk.status)}
+                  {getPaymentBadge(bk.paymentStatus)}
+                  {bk.source === 'walk-in' ? (
+                    <span className="px-2 py-0.5 rounded bg-gray-150 border border-gray-300 text-gray-700 text-[10px] font-bold uppercase tracking-wider">🚶 Walk-in</span>
+                  ) : bk.bookingType === 'online' ? (
+                    <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wider">🌐 Online Video</span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-250 text-amber-800 text-[10px] font-bold uppercase tracking-wider">🏥 Clinic Visit</span>
+                  )}
+                </div>
+                <span className="font-mono text-[9px] font-black text-gray-400 bg-white border px-2 py-0.5 rounded shadow-2xs">
+                  {bk.id}
+                </span>
+              </div>
+
+              <div className="space-y-1 text-xs">
+                <p className="font-bold text-gray-900 text-sm">{bk.name}</p>
+                <p className="text-gray-600 font-semibold">
+                  {bk.date} at {bk.time} • <span className="text-primary font-bold">{bk.service}</span>
+                </p>
+                <p className="text-gray-500 font-semibold flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-gray-400" /> {bk.phone}
+                  {bk.email && ` • ${bk.email}`}
+                </p>
+
+                {(bk.age || bk.gender || bk.skinType) && (
+                  <p className="text-[10px] text-gray-600 font-semibold bg-white border border-gray-150 p-2 rounded-lg mt-1">
+                    {bk.age && `Age: ${bk.age}`} {bk.gender && ` • Gender: ${bk.gender}`} {bk.skinType && ` • Skin: ${bk.skinType}`}
+                  </p>
+                )}
+                {bk.problemDescription && (
+                  <div className="bg-white border border-gray-150 p-2.5 rounded-lg text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-1">
+                    <p className="text-[9px] uppercase font-black tracking-widest text-primary">Problem Condition:</p>
+                    <p>{bk.problemDescription}</p>
                   </div>
-                ))}
-            </div>
-          )}
-
-          {/* PAGINATION FOOTER */}
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-gray-200 text-xs text-gray-600">
-            <div className="flex items-center gap-2">
-              <span>Showing <strong>{Math.min((currentPage - 1) * pageSize + 1, filteredBookings.length)}</strong> to <strong>{Math.min(currentPage * pageSize, filteredBookings.length)}</strong> of <strong>{filteredBookings.length}</strong> records</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="ml-2 px-2 py-1 border rounded-lg bg-gray-50 text-xs font-bold focus:outline-none"
-              >
-                <option value={5}>5 per page</option>
-                <option value={10}>10 per page</option>
-                <option value={20}>20 per page</option>
-                <option value={50}>50 per page</option>
-              </select>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-lg border font-bold text-xs bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Previous
-              </button>
-
-              {Array.from({ length: Math.ceil(filteredBookings.length / pageSize) || 1 }, (_, i) => i + 1).map((page) => (
+            <div className="flex flex-wrap gap-1.5 pt-2 border-t">
+              {bk.status === 'pending' && (
                 <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${
-                    currentPage === page ? 'bg-primary text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
-                  }`}
+                  onClick={() => handleActionWithWA(bk.id, 'confirm', undefined, undefined, undefined, undefined, bk.name)}
+                  className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase"
                 >
-                  {page}
+                  Confirm Slot
                 </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, Math.ceil(filteredBookings.length / pageSize)))}
-                disabled={currentPage >= Math.ceil(filteredBookings.length / pageSize)}
-                className="px-3 py-1.5 rounded-lg border font-bold text-xs bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-              >
-                Next <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              )}
+              {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
+                <button
+                  onClick={() => {
+                    if (bk.paymentStatus === 'paid') {
+                      handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name);
+                    } else {
+                      setPaymentPromptBooking(bk);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-[10px] font-bold uppercase"
+                >
+                  Check In
+                </button>
+              )}
             </div>
           </div>
+        ))}
+    </div>
+  )
+}
+
+{/* PAGINATION FOOTER */ }
+<div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-gray-200 text-xs text-gray-600">
+  <div className="flex items-center gap-2">
+    <span>Showing <strong>{Math.min((currentPage - 1) * pageSize + 1, filteredBookings.length)}</strong> to <strong>{Math.min(currentPage * pageSize, filteredBookings.length)}</strong> of <strong>{filteredBookings.length}</strong> records</span>
+    <select
+      value={pageSize}
+      onChange={(e) => {
+        setPageSize(Number(e.target.value));
+        setCurrentPage(1);
+      }}
+      className="ml-2 px-2 py-1 border rounded-lg bg-gray-50 text-xs font-bold focus:outline-none"
+    >
+      <option value={5}>5 per page</option>
+      <option value={10}>10 per page</option>
+      <option value={20}>20 per page</option>
+      <option value={50}>50 per page</option>
+    </select>
+  </div>
+
+  <div className="flex items-center gap-1">
+    <button
+      onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+      disabled={currentPage === 1}
+      className="px-3 py-1.5 rounded-lg border font-bold text-xs bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+    >
+      <ChevronLeft className="w-3.5 h-3.5" /> Previous
+    </button>
+
+    {Array.from({ length: Math.ceil(filteredBookings.length / pageSize) || 1 }, (_, i) => i + 1).map((page) => (
+      <button
+        key={page}
+        onClick={() => setCurrentPage(page)}
+        className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${currentPage === page ? 'bg-primary text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+      >
+        {page}
+      </button>
+    ))}
+
+    <button
+      onClick={() => setCurrentPage((p) => Math.min(p + 1, Math.ceil(filteredBookings.length / pageSize)))}
+      disabled={currentPage >= Math.ceil(filteredBookings.length / pageSize)}
+      className="px-3 py-1.5 rounded-lg border font-bold text-xs bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+    >
+      Next <ChevronRight className="w-3.5 h-3.5" />
+    </button>
+  </div>
+</div>
         </>
       )}
 
-    </div>
+    </div >
   );
 }

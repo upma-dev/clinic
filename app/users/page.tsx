@@ -35,7 +35,7 @@ export default function PatientPortal() {
   // App state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [patientPhone, setPatientPhone] = useState('');
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(false);
   
   // Data state
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -51,34 +51,52 @@ export default function PatientPortal() {
   const [telemedicineBookings, setTelemedicineBookings] = useState<any[]>([]);
   const [dbPatientId, setDbPatientId] = useState<string>('');
 
-  // Check login state
+  // Check login state with instant timeout safety
   useEffect(() => {
+    let active = true;
+    const timeout = setTimeout(() => {
+      if (active) setCheckingSession(false);
+    }, 1200);
+
     fetch('/api/auth/patient')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data?.authenticated) {
+        if (active && data?.authenticated) {
           setIsLoggedIn(true);
           setPatientPhone(data.phone);
         }
       })
       .catch(() => {})
-      .finally(() => setCheckingSession(false));
+      .finally(() => {
+        if (active) {
+          clearTimeout(timeout);
+          setCheckingSession(false);
+        }
+      });
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
   }, []);
 
-  // Fetch patient data
+  // Fetch patient data in parallel for instant loading
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
     try {
-      const res = await fetch('/api/patients/data');
-      if (res.ok) {
+      const [res, resTele] = await Promise.all([
+        fetch('/api/patients/data').catch(() => null),
+        fetch('/api/telemedicine/patient').catch(() => null)
+      ]);
+
+      if (res && res.ok) {
         const data = await res.json();
-        setBookings(data.bookings);
+        setBookings(data.bookings || []);
         setQueueSnapshot(data.queueSnapshot);
-        setActiveQueueEntries(data.activeQueueEntries);
+        setActiveQueueEntries(data.activeQueueEntries || []);
       }
       
-      const resTele = await fetch('/api/telemedicine/patient');
-      if (resTele.ok) {
+      if (resTele && resTele.ok) {
         const teleData = await resTele.json();
         setTelemedicineBookings(teleData.appointments || []);
         if (teleData.patientId) setDbPatientId(teleData.patientId);

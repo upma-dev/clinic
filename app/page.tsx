@@ -1,30 +1,26 @@
 /**
  * @file app/page.tsx
- * ✅ FIX: Removed 'use client' — page is now a Server Component.
- * Only leaf components that need interactivity are marked 'use client'.
- * This restores SSR benefits and improves SEO crawlability.
+ * Optimized Server Component with direct static imports for instant route switching
  */
 
 import React from 'react';
 import Navbar from '@/components/sections/Navbar';
 import Hero from '@/components/sections/Hero';
-import dynamic from 'next/dynamic';
+import Services from '@/components/sections/Services';
+import BookingForm from '@/components/sections/BookingForm';
+import About from '@/components/sections/About';
+import Certificates from '@/components/sections/Certificates';
+import BeforeAfter from '@/components/sections/BeforeAfter';
+import VideoSection from '@/components/sections/VideoSection';
+import Testimonials from '@/components/sections/Testimonials';
+import BlogSection from '@/components/sections/Blog';
+import PatientPortal from '@/components/sections/PatientPortal';
+import HowToUse from '@/components/sections/HowToUse';
+import Contact from '@/components/sections/Contact';
+import Footer from '@/components/sections/Footer';
+
 import { getClinicSettings } from '@/lib/db/settings';
 import { getCmsSettings } from '@/lib/db/cms';
-
-const Services = dynamic(() => import('@/components/sections/Services'));
-const BookingForm = dynamic(() => import('@/components/sections/BookingForm'));
-const About = dynamic(() => import('@/components/sections/About'));
-const Certificates = dynamic(() => import('@/components/sections/Certificates'));
-const BeforeAfter = dynamic(() => import('@/components/sections/BeforeAfter'));
-const VideoSection = dynamic(() => import('@/components/sections/VideoSection'));
-const Testimonials = dynamic(() => import('@/components/sections/Testimonials'));
-const BlogSection = dynamic(() => import('@/components/sections/Blog'));
-const Gallery = dynamic(() => import('@/components/sections/Gallery'));
-const PatientPortal = dynamic(() => import('@/components/sections/PatientPortal'));
-const HowToUse = dynamic(() => import('@/components/sections/HowToUse'));
-const Contact = dynamic(() => import('@/components/sections/Contact'));
-const Footer = dynamic(() => import('@/components/sections/Footer'));
 
 export default async function Home() {
   const settings = await getClinicSettings();
@@ -51,28 +47,28 @@ export default async function Home() {
       {/* 3. Services */}
       <Services cms={cms} />
 
-      {/* 3. About */}
+      {/* 4. About */}
       <About cms={cms} />
 
-      {/* 4. Certificates */}
+      {/* 5. Certificates */}
       <Certificates />
 
-      {/* 5. Before & After */}
+      {/* 6. Before & After */}
       <BeforeAfter />
 
-      {/* 7. Video — educational content, clinic tour */}
+      {/* 7. Video — educational content */}
       <VideoSection />
 
       {/* 8. Testimonials — social proof */}
       <Testimonials cms={cms} />
 
-      {/* 9. Patient Portal — Check live queue, bookings, routines */}
+      {/* 9. Patient Portal — Check live queue */}
       <PatientPortal />
 
-      {/* 10. How To Use — Guide for Patient Portal */}
+      {/* 10. How To Use — Guide */}
       <HowToUse />
 
-      {/* 11. Blog — SEO content & education */}
+      {/* 11. Blog */}
       <BlogSection cms={cms} />
 
       {/* 12. Contact + Map */}

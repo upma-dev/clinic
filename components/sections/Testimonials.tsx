@@ -63,12 +63,12 @@ export default function Testimonials({ cms }: TestimonialsProps) {
 
   return (
     <section id="testimonials" className="py-22 bg-stone-50 select-none overflow-hidden relative border-t border-b border-gray-200">
-      
+
       {/* Decorative Background Accent */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/5 rounded-full filter blur-3xl pointer-events-none" />
 
       <div className="relative z-10">
-        
+
         {/* Section Header */}
         <div className="mb-12 text-center px-4">
           <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-3">
@@ -81,7 +81,7 @@ export default function Testimonials({ cms }: TestimonialsProps) {
         </div>
 
         {/* Infinite Horizontal Scroller */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, rotateX: 30, y: 50 }}
           whileInView={{ opacity: 1, rotateX: 0, y: 0 }}
           viewport={{ once: true, margin: '-50px' }}
@@ -93,7 +93,7 @@ export default function Testimonials({ cms }: TestimonialsProps) {
         >
           <div className="flex animate-scroll hover:[animation-play-state:paused] whitespace-nowrap">
             {[...reviews, ...reviews].map((review, idx) => (
-              <div 
+              <div
                 key={idx}
                 className="inline-block w-[350px] sm:w-[450px] mx-4 bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 shadow-md hover:shadow-xl transition-shadow whitespace-normal shrink-0"
               >
