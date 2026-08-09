@@ -633,8 +633,8 @@ export default function AppointmentsList({
                                     title="Complete Session"
                                   >
                                     Complete
-                                  </button>
-                                )}
+                                     )}
+>>>>>>> 73b47a8271fb0e11904167abc95a9be7a113185a
 
                                 {/* Row Details Toggle Button */}
                                 <button
@@ -682,6 +682,13 @@ export default function AppointmentsList({
                                       {bk.razorpayOrderId && <p className="text-gray-600">Order ID: <span className="font-mono text-gray-500">{bk.razorpayOrderId}</span></p>}
                                       {bk.razorpayPaymentId && <p className="text-gray-600">Transaction ID: <span className="font-mono text-gray-500">{bk.razorpayPaymentId}</span></p>}
                                       {bk.paidAt && <p className="text-gray-600">Paid At: <span className="text-gray-500">{new Date(bk.paidAt).toLocaleString()}</span></p>}
+                                      {bk.bookingType === 'online' && bk.meetingLink && (
+                                        <div className="bg-teal-50/20 border border-teal-100 p-2 rounded-xl text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-2 text-left">
+                                          <p className="text-[9px] uppercase font-black tracking-widest text-teal-700">Video Consultation Link:</p>
+                                          <p>Meeting URL: <a href={bk.meetingLink} target="_blank" rel="noopener noreferrer" className="text-[#1B4F72] hover:underline font-bold">{bk.meetingLink}</a></p>
+                                          {bk.meetingPassword && <p>Password: <span className="font-bold text-gray-900">{bk.meetingPassword}</span></p>}
+                                        </div>
+                                      )}
                                     </div>
 
                                     {/* Column 3: Full Actions Panel */}
@@ -848,6 +855,126 @@ export default function AppointmentsList({
                     })}
                 </tbody>
               </table>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {/* Confirms/Verifies booking request */}
+                  {bk.status === 'pending' && (
+                    <button
+                      onClick={() => handleActionWithWA(bk.id, 'confirm', undefined, undefined, undefined, undefined, bk.name)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Confirm Slot
+                    </button>
+                  )}
+
+                  {/* Verify Payment for pending online bookings */}
+                  {bk.bookingType === 'online' && bk.status === 'pending' && bk.paymentStatus === 'pending' && bk.razorpayPaymentLinkId && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = (await onAction(bk.id, 'verify-payment-link')) as any;
+                          if (res && res.paid) {
+                            alert('Payment verified as Paid! Slot has been confirmed and video consultation meeting link generated.');
+                            onRefresh();
+                          } else {
+                            alert(`Payment link is still unpaid (Current status: ${res?.paymentLinkStatus || 'unpaid'}).`);
+                          }
+                        } catch (err: any) {
+                          alert(err.message || 'Verification failed');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-750 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 animate-[spin_4s_linear_infinite]" /> Verify Payment
+                    </button>
+                  )}
+
+                   {/* Arrived Checked In (for offline/physical visits only) */}
+                  {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
+                    <button
+                      onClick={() => {
+                        if (bk.paymentStatus === 'paid') {
+                          handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name);
+                        } else {
+                          setPaymentPromptBooking(bk);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" /> Check In
+                    </button>
+                  )}
+
+                  {/* Send Meeting Link (WhatsApp) for online bookings */}
+                  {bk.bookingType === 'online' && bk.status === 'confirmed' && bk.paymentStatus === 'paid' && bk.meetingLink && (
+                    <button
+                      onClick={() => {
+                        const msg = `*Skin Hub Clinic — Online Consultation Confirmed* 🏥\n\nHello ${bk.name},\n\nYour payment has been received and your slot on ${bk.date} at ${bk.time} is successfully confirmed.\n\nPlease join your video consultation using the meeting details below:\n\nMeeting Link: ${bk.meetingLink}\nPassword: ${bk.meetingPassword || '—'}\n\nPlease join 5 minutes before your scheduled slot.`;
+                        const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                        window.open(waUrl, '_blank');
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <Video className="w-3.5 h-3.5" /> Send Meeting Link (WA)
+                    </button>
+                  )}
+
+                  {/* Complete Consultation (prompts follow-up date option) */}
+                  {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online')) && !showFollowUpInput[bk.id] && (
+                    <button
+                      onClick={() => setShowFollowUpInput({ ...showFollowUpInput, [bk.id]: true })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" /> Complete Session
+                    </button>
+                  )}
+
+                  {/* Reschedule Button */}
+                  {bk.status !== 'cancelled' && bk.status !== 'completed' && !showRescheduleInput[bk.id] && (
+                    <button
+                      onClick={() => setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: true })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B4F72] hover:brightness-110 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <Clock className="w-3.5 h-3.5" /> Reschedule
+                    </button>
+                  )}
+
+                  {/* Cancel Booking */}
+                  {bk.status !== 'cancelled' && bk.status !== 'completed' && (
+                    <button
+                      onClick={() => onAction(bk.id, 'cancel')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <XCircle className="w-3.5 h-3.5" /> Cancel
+                    </button>
+                  )}
+
+                  {/* Refund Button */}
+                  {String(bk.paymentStatus).toLowerCase() === 'paid' && bk.status !== 'Cancelled' && bk.status !== 'cancelled' && (
+                    <button
+                      onClick={() => {
+                        if (confirm('Are you sure you want to refund this payment? This will also cancel the booking.')) {
+                          onAction(bk.id, 'refund');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Refund
+                    </button>
+                  )}
+
+                  {/* Invoice Button */}
+                  {bk.payOnline && (
+                    <button
+                      onClick={() => window.open(`/api/appointments/invoice?id=${bk.id}`, '_blank')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-150 hover:bg-gray-200 text-gray-700 border rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-gray-500" /> Invoice
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
             </div>
           ) : (
             /* CARDS GRID VIEW */
