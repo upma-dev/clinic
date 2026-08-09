@@ -45,9 +45,9 @@ export default function HowToUse() {
   return (
     <section className="py-20 bg-white relative overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        
+
         <div className="text-center mb-16">
-          <motion.h2 
+          <motion.h2
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -55,7 +55,7 @@ export default function HowToUse() {
           >
             How to use the <span className="text-primary italic">Patient Portal</span>
           </motion.h2>
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -64,7 +64,7 @@ export default function HowToUse() {
           >
             A simple, 4-step guide to managing your skin health and clinic visits seamlessly.
           </motion.p>
-          
+
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -72,9 +72,8 @@ export default function HowToUse() {
             transition={{ delay: 0.15 }}
           >
             <Link
-              href="/users#patient-portal"
-              onClick={handlePortalClick}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary/10 hover:bg-primary text-primary hover:text-white font-bold text-sm transition-all duration-300 shadow-sm hover:shadow-md group cursor-pointer border border-primary/20"
+              href="/users"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary hover:bg-primary/90 text-white font-bold text-sm transition-all duration-300 shadow-md hover:shadow-lg group cursor-pointer border border-primary/20"
             >
               <UserCheck className="w-4 h-4" />
               <span>Go to Patient Portal</span>
@@ -95,11 +94,11 @@ export default function HowToUse() {
             >
               <div>
                 <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${step.color} opacity-10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110`} />
-                
+
                 <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${step.color} shadow-lg flex items-center justify-center mb-6 transform -rotate-3 group-hover:rotate-0 transition-transform`}>
                   {step.icon}
                 </div>
-                
+
                 <h3 className="font-playfair text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
                 <p className="font-sans text-sm text-gray-600 leading-relaxed">{step.desc}</p>
               </div>
