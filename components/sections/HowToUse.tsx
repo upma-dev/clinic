@@ -120,33 +120,6 @@ export default function HowToUse() {
           ))}
         </div>
 
-        {/* Bottom CTA Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.6 }}
-          className="mt-16 bg-gradient-to-r from-primary to-accent rounded-3xl p-8 sm:p-10 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-6"
-        >
-          <div className="text-center sm:text-left">
-            <h3 className="font-playfair text-2xl sm:text-3xl font-bold mb-2">
-              Ready to access your Patient Portal?
-            </h3>
-            <p className="font-sans text-white/90 text-sm max-w-xl">
-              Track your prescriptions, routine schedules, and live clinic queue status in real time.
-            </p>
-          </div>
-
-          <Link
-            href="/users#patient-portal"
-            onClick={handlePortalClick}
-            className="shrink-0 inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-white text-primary hover:bg-surface font-extrabold text-base shadow-lg hover:scale-105 active:scale-95 transition-all duration-300 group cursor-pointer"
-          >
-            <span>Go to Patient Portal</span>
-            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </Link>
-        </motion.div>
-
       </div>
     </section>
   );
