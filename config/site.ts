@@ -7,12 +7,12 @@
 
 export const siteConfig = {
   // Brand and Clinician Identity
-  clinicName: "Skin Hub",
+  clinicName: "Dr. Prateek Tiwari's Skin Hub Derma, Hair & Laser Clinic",
   doctorName: "Dr. Prateek Tiwari",
   credentials: "MBBS, DVD (Dermatology)",
   
   // Physical and Contact coordinates
-  location: "1st Floor, Royal Arcade, Above UCO Bank, Freeganj, Ujjain, Madhya Pradesh 456010",
+  location: "Skin Hub & Physio Centre, Rishi Nagar, Ujjain, Madhya Pradesh 456010",
   whatsapp: "919827042111", // Format: [CountryCode][Number] without '+'
   phone: "+91 98270 42111",
   email: "contact@skinhubujjain.com",

@@ -12,7 +12,7 @@ export default async function BookingPage() {
   return (
     <main className="min-h-screen bg-surface">
       <Navbar settings={settings} cms={cms} />
-      <div className="pt-28 pb-6 select-text">
+      <div className="pt-20 sm:pt-28 pb-6 select-text">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <BookingForm />
         </div>

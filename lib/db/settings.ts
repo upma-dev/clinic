@@ -2,9 +2,9 @@ import { getDb, COLLECTIONS } from '../mongodb';
 import type { ClinicSettings } from '../types';
 
 const DEFAULT_SETTINGS: ClinicSettings = {
-  clinicName: 'Skin Hub',
+  clinicName: "Dr. Prateek Tiwari's Skin Hub Derma, Hair & Laser Clinic",
   clinicLogo: '/assets/logo.png',
-  clinicAddress: '1st Floor, Royal Arcade, Above UCO Bank, Freeganj, Ujjain, Madhya Pradesh 456010',
+  clinicAddress: 'Skin Hub & Physio Centre, Rishi Nagar, Ujjain, Madhya Pradesh 456010',
   clinicPhone: '+91 98270 42111',
   clinicEmail: 'contact@skinhubujjain.com',
   morningStart: '09:00',

@@ -51,11 +51,11 @@ export default function Hero({ settings, cms }: HeroProps) {
     "medicalSpecialty": "Dermatology",
     "aggregateRating": {
       "@type": "AggregateRating",
-      "ratingValue": "4.9",
-      "reviewCount": "2400"
+      "ratingValue": "4.8",
+      "reviewCount": "694"
     }
   };
-  
+
   // Parallax effect for the doctor photo on scroll down
   const { scrollY } = useScroll();
   const photoY = useTransform(scrollY, [0, 500], [0, 20]);
@@ -72,8 +72,8 @@ export default function Hero({ settings, cms }: HeroProps) {
     const { clientX, clientY } = e;
     const { innerWidth, innerHeight } = window;
     // Shift opposite to mouse, max 6px
-    const x = ((clientX / innerWidth) - 0.5) * -12; 
-    const y = ((clientY / innerHeight) - 0.5) * -12; 
+    const x = ((clientX / innerWidth) - 0.5) * -12;
+    const y = ((clientY / innerHeight) - 0.5) * -12;
     mouseX.set(x);
     mouseY.set(y);
   };
@@ -82,11 +82,11 @@ export default function Hero({ settings, cms }: HeroProps) {
   const customEase = [0.16, 1, 0.3, 1] as const;
 
   return (
-    <section 
-      id="home" 
-      ref={containerRef} 
+    <section
+      id="home"
+      ref={containerRef}
       onMouseMove={handleMouseMove}
-      className="relative pt-32 pb-20 bg-[#F9FBFC] overflow-hidden min-h-[90vh] flex items-center"
+      className="relative pt-20 sm:pt-32 pb-12 sm:pb-20 bg-[#F9FBFC] overflow-hidden lg:min-h-[90vh] lg:flex lg:items-center"
     >
       <Script
         id="medical-clinic-schema"
@@ -96,7 +96,7 @@ export default function Hero({ settings, cms }: HeroProps) {
 
       {/* Animated Gradient Blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <motion.div 
+        <motion.div
           animate={shouldReduceMotion ? {} : {
             x: [0, 40, 0, -40, 0],
             y: [0, 20, -20, 10, 0],
@@ -106,7 +106,7 @@ export default function Hero({ settings, cms }: HeroProps) {
           transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
           className="absolute top-[10%] left-[10%] w-[500px] h-[500px] rounded-full opacity-[0.08] blur-[80px]"
         />
-        <motion.div 
+        <motion.div
           animate={shouldReduceMotion ? {} : {
             x: [0, -30, 20, -20, 0],
             y: [0, -40, 30, -20, 0],
@@ -116,7 +116,7 @@ export default function Hero({ settings, cms }: HeroProps) {
           transition={{ duration: 30, repeat: Infinity, ease: "easeInOut", delay: 1 }}
           className="absolute top-[20%] right-[10%] w-[400px] h-[400px] rounded-full opacity-[0.10] blur-[80px]"
         />
-        <motion.div 
+        <motion.div
           animate={shouldReduceMotion ? {} : {
             x: [0, 30, -30, 20, 0],
             y: [0, 30, 20, -30, 0],
@@ -129,7 +129,7 @@ export default function Hero({ settings, cms }: HeroProps) {
       </div>
 
       {/* Grid Pattern Background */}
-      <motion.div 
+      <motion.div
         style={{ x: parallaxX, y: parallaxY }}
         className="absolute inset-0 z-0 opacity-15 overflow-hidden pointer-events-none"
       >
@@ -153,7 +153,7 @@ export default function Hero({ settings, cms }: HeroProps) {
           <div className="lg:col-span-7 text-left space-y-6">
 
             {/* Badges */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.15, delay: 0, ease: customEase }}
@@ -170,30 +170,27 @@ export default function Hero({ settings, cms }: HeroProps) {
             </motion.div>
 
             {/* Headline */}
-            <h1 className="font-playfair text-4xl sm:text-5xl lg:text-[4rem] font-black text-gray-900 leading-[1.1] tracking-tight">
-              <motion.span 
+            <h1 className="font-playfair text-4xl sm:text-5xl lg:text-[3.5rem] font-black text-gray-900 leading-[1.15] tracking-tight">
+              <motion.span
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: shouldReduceMotion ? 0 : 0.2, delay: shouldReduceMotion ? 0 : 0.15, ease: customEase }}
-                className="inline-block"
+                className="block sm:inline"
               >
-                {heroTitleLine1.split(' ').map((w, i) => (
-                  <span key={i} className={i === 1 ? "text-accent mx-1" : i === 2 ? "text-accent mx-1" : ""}>{w} </span>
-                ))}
+                {heroTitleLine1}{' '}
               </motion.span>
-              <br />
-              <motion.span 
+              <motion.span
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: shouldReduceMotion ? 0 : 0.2, delay: shouldReduceMotion ? 0 : 0.25, ease: customEase }}
-                className="inline-block"
+                className="inline text-teal-600 font-serif italic"
               >
                 {heroTitleLine2}
               </motion.span>
             </h1>
 
             {/* Paragraph */}
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.15, delay: shouldReduceMotion ? 0 : 0.45, ease: customEase }}
@@ -203,7 +200,7 @@ export default function Hero({ settings, cms }: HeroProps) {
             </motion.p>
 
             {/* Location/Hours Card */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.1, delay: shouldReduceMotion ? 0 : 0.6, ease: customEase }}
@@ -214,7 +211,7 @@ export default function Hero({ settings, cms }: HeroProps) {
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] uppercase font-black tracking-widest text-primary block">
-                  Clinical Center: Freeganj, Ujjain
+                  Clinical Center: Rishi Nagar, Ujjain
                 </span>
                 <span className="font-sans text-sm font-bold text-gray-900 block">
                   {clinicName} — Clinical & Aesthetic Solutions
@@ -226,7 +223,7 @@ export default function Hero({ settings, cms }: HeroProps) {
             </motion.div>
 
             {/* CTA Buttons */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.1, delay: shouldReduceMotion ? 0 : 0.7, ease: customEase }}
@@ -247,19 +244,19 @@ export default function Hero({ settings, cms }: HeroProps) {
               </Link>
             </motion.div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.2, delay: shouldReduceMotion ? 0 : 0.75, ease: customEase }}
               className="pt-4 flex items-center space-x-3 text-xs font-sans font-bold text-gray-400 uppercase tracking-widest cursor-default"
             >
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Verified 4.9+ Star Rated Clinic in Ujjain</span>
+              <span>Verified 4.8★ Rated Clinic in Rishi Nagar, Ujjain (694+ Reviews)</span>
             </motion.div>
           </div>
 
           {/* Doctor Image Container */}
-          <motion.div 
+          <motion.div
             style={shouldReduceMotion ? {} : { y: photoY }}
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -268,19 +265,20 @@ export default function Hero({ settings, cms }: HeroProps) {
           >
             <div className="relative w-full max-w-[360px] aspect-[3/4]">
 
-              <div className="absolute inset-0 rounded-[40px] shadow-sm overflow-hidden border-8 border-white bg-slate-200 z-10">
+              <div className="absolute inset-0 rounded-[36px] shadow-[0_20px_50px_rgba(20,184,166,0.18)] overflow-hidden border-[6px] border-white bg-slate-100 z-10 transition-shadow duration-500 group-hover:shadow-[0_25px_60px_rgba(20,184,166,0.28)]">
                 <Image
                   src={heroImageUrl}
                   alt={`${doctorName} - Best Dermatologist in Ujjain`}
                   fill
-                  className="object-cover"
+                  className="object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.03]"
                   priority
                   sizes="(max-width: 768px) 100vw, 360px"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-60 z-15 pointer-events-none" />
               </div>
 
               {/* Floating Badge */}
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: shouldReduceMotion ? 0 : 0.15, delay: shouldReduceMotion ? 0 : 0.8, ease: customEase }}

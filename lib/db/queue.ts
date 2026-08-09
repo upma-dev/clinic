@@ -47,13 +47,18 @@ export async function updateDailyQueue(
 }
 
 export async function getQueueEntries(date: string): Promise<QueueEntry[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection<QueueEntry>(COLLECTIONS.queue)
-    .find({ date })
-    .sort({ priority: 1, createdAt: 1 }) // Respect priority first, then createdAt
-    .toArray();
-  return docs.map(({ _id, ...e }) => ({ ...e, _id: _id?.toString() }));
+  try {
+    const db = await getDb();
+    const docs = await db
+      .collection<QueueEntry>(COLLECTIONS.queue)
+      .find({ date })
+      .sort({ priority: 1, createdAt: 1 }) // Respect priority first, then createdAt
+      .toArray();
+    return docs.map(({ _id, ...e }) => ({ ...e, _id: _id?.toString() }));
+  } catch (error) {
+    console.error('Failed to get queue entries:', error);
+    return [];
+  }
 }
 
 export async function getNextTokenNumber(date: string): Promise<number> {
@@ -71,7 +76,7 @@ export async function addQueueEntry(entry: QueueEntry): Promise<QueueEntry> {
       return entry;
     }
   }
-  
+
   // Set default priority to 0 if not present
   if (doc.priority === undefined) {
     doc.priority = 0;
@@ -188,14 +193,14 @@ export async function updateQueueEntryStatus(
 // Emergency Priority (pushes a patient to the top of waiting queue)
 export async function setEmergencyPriority(date: string, bookingId: string): Promise<boolean> {
   const db = await getDb();
-  
+
   // Find minimum priority currently in the date's queue entries
   const first = await db.collection<QueueEntry>(COLLECTIONS.queue)
     .find({ date })
     .sort({ priority: 1 })
     .limit(1)
     .toArray();
-    
+
   const minPriority = first.length ? first[0].priority ?? 0 : 0;
 
   const result = await db.collection(COLLECTIONS.queue).updateOne(
@@ -239,33 +244,49 @@ export async function removeQueueEntry(date: string, bookingId: string): Promise
 }
 
 export async function getPublicQueueSnapshot(date: string) {
-  const [daily, entries] = await Promise.all([
-    getDailyQueue(date),
-    getQueueEntries(date),
-  ]);
+  try {
+    const [daily, entries] = await Promise.all([
+      getDailyQueue(date),
+      getQueueEntries(date),
+    ]);
 
-  const waiting = entries.filter((e) => e.status === 'waiting');
-  const serving = entries.find((e) => e.status === 'serving' || e.status === 'consulting');
+    const waiting = entries.filter((e) => e.status === 'waiting');
+    const serving = entries.find((e) => e.status === 'serving' || e.status === 'consulting');
 
-  return {
-    currentToken: daily.currentToken,
-    servingPatient: serving
-      ? { token: 1, firstName: serving.name?.trim().split(/\s+/)[0] || 'Patient' }
-      : null,
-    totalWaiting: waiting.length,
-    totalToday: daily.totalPatientsToday,
-    estimatedWaitMinutes: daily.estimatedWaitMinutes,
-    congestion: daily.congestion,
-    message: daily.message,
-    lastUpdated: daily.lastUpdated,
-    status: daily.status || 'active', // Active, Paused, Away
-    queuePreview: waiting.map((e, idx) => ({
-      token: idx + 1,
-      firstName: e.name?.trim().split(/\s+/)[0] || 'Patient',
-      position: idx + 1,
-      status: e.status,
-    })),
-  };
+    return {
+      currentToken: daily.currentToken,
+      servingPatient: serving
+        ? { token: 1, firstName: serving.name?.trim().split(/\s+/)[0] || 'Patient' }
+        : null,
+      totalWaiting: waiting.length,
+      totalToday: daily.totalPatientsToday,
+      estimatedWaitMinutes: daily.estimatedWaitMinutes,
+      congestion: daily.congestion,
+      message: daily.message,
+      lastUpdated: daily.lastUpdated,
+      status: daily.status || 'active', // Active, Paused, Away
+      queuePreview: waiting.map((e, idx) => ({
+        token: idx + 1,
+        firstName: e.name?.trim().split(/\s+/)[0] || 'Patient',
+        position: idx + 1,
+        status: e.status,
+      })),
+    };
+  } catch (error) {
+    console.error('Failed to get public queue snapshot:', error);
+    return {
+      currentToken: 0,
+      servingPatient: null,
+      totalWaiting: 0,
+      totalToday: 0,
+      estimatedWaitMinutes: 0,
+      congestion: 'green' as const,
+      message: 'Walk-ins open.',
+      lastUpdated: new Date().toISOString(),
+      status: 'active' as const,
+      queuePreview: [],
+    };
+  }
 }
 
 function initials(name: string): string {

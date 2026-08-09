@@ -158,7 +158,7 @@ export default function OnlineConsultationPage() {
       <Navbar />
 
       {/* Hero Landing Section */}
-      <section className="pt-32 pb-20 bg-gradient-to-br from-primary/5 via-white to-emerald-50 relative overflow-hidden">
+      <section className="pt-24 sm:pt-32 pb-20 bg-gradient-to-br from-primary/5 via-white to-emerald-50 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-20 -mt-20" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
           <motion.div 

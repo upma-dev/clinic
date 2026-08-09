@@ -60,9 +60,6 @@ export default async function Home() {
       {/* 5. Before & After */}
       <BeforeAfter />
 
-      {/* 6. Gallery — clinic photos + treatment visuals */}
-      <Gallery cms={cms} />
-
       {/* 7. Video — educational content, clinic tour */}
       <VideoSection />
 

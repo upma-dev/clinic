@@ -5,24 +5,24 @@ const DEFAULT_CMS: CMSContent = {
   bannerText: "Best Dermatologist in Ujjain — Book online to skip the queue",
   bannerLink: "/booking",
   bannerEnabled: true,
-  
-  heroTitleLine1: "Advanced Skin, Hair",
-  heroTitleLine2: "Laser Care in Ujjain",
-  heroSubtitle: "Best Dermatologist in Ujjain for Advanced Skin, Hair & Laser Care",
-  heroDescription: "Trusted by thousands of patients for modern dermatology and hair restoration. Managed by expert Dr. Prateek Tiwari, MBBS, DVD (Dermatology).",
-  heroBadge1: "BEST DERMATOLOGIST IN UJJAIN",
-  heroBadge2: "TOP RATED SKIN SPECIALIST",
+
+  heroTitleLine1: "Best Dermatologist in Ujjain",
+  heroTitleLine2: "Skin, Hair & Laser Clinic",
+  heroSubtitle: "Dr. Prateek Tiwari — Best Dermatologist & Hair Specialist in Rishi Nagar, Ujjain",
+  heroDescription: "Advanced medical dermatology, PRP hair growth therapy, chemical yellow peels & US-FDA approved laser treatments by Dr. Prateek Tiwari (MBBS, DVD) in Rishi Nagar, Ujjain.",
+  heroBadge1: "4.8★ TOP DERMATOLOGIST IN UJJAIN",
+  heroBadge2: "RISHI NAGAR SKIN & LASER CLINIC",
   heroExperienceBadge: "12+ Years",
   heroImageUrl: "/assets/doctor.png",
   heroExperienceText: "EXPERIENCE",
-  
+
   aboutTitle: "Dr. Prateek Tiwari",
   aboutSubtitle: "MBBS, DVD (Dermatology)",
   aboutDescription: "With over 12 years of dedicated practice in dermatology and cosmetology, Dr. Prateek Tiwari has helped thousands of patients across Ujjain and Madhya Pradesh achieve healthier skin and restored confidence. His patient-first philosophy combines evidence-based medicine with modern aesthetic science.",
   aboutStats: [
     { value: '12+', label: 'Years Experience' },
     { value: '5,000+', label: 'Patients Treated' },
-    { value: '4.9★', label: 'Google Rating' },
+    { value: '4.8★', label: 'Google Rating' },
     { value: '15+', label: 'Treatments' }
   ],
   aboutCredentials: [
@@ -83,18 +83,18 @@ const DEFAULT_CMS: CMSContent = {
     { id: "g3", title: "PRP Session In Progress", imageUrl: "/assets/clinic-treatment.jpg", category: "Treatment" }
   ],
 
-  contactAddress: "1st Floor, Royal Arcade, Above UCO Bank, Freeganj, Ujjain, Madhya Pradesh 456010",
+  contactAddress: "Skin Hub & Physio Centre, Rishi Nagar, Ujjain, Madhya Pradesh 456010",
   contactPhone: "+91 98270 42111",
   contactWhatsapp: "919827042111",
   contactEmail: "contact@skinhubujjain.com",
   contactTimings: "Monday - Saturday: 09:00 AM - 02:00 PM | 05:00 PM - 09:00 PM (Sunday Closed)",
-  googleMapsEmbed: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3671.6917637841323!2d75.78713217596105!3d23.035129615822312!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x396374020a555555%3A0xe54d8b9f8ef42111!2sSkin%20Hub%20Clinic!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin",
+  googleMapsEmbed: "https://www.google.com/maps?q=Rishi+Nagar+Ujjain+Madhya+Pradesh&output=embed",
 
   instagramUrl: "https://www.instagram.com/skinhub_ujjain/",
   facebookUrl: "https://facebook.com",
   youtubeUrl: "https://youtube.com",
   twitterUrl: "https://twitter.com",
-  
+
   footerText: "Premium, board-certified medical dermatology clinic led by senior consultant Dr. Prateek Tiwari. Restoring skin confidence and vitality through clinical excellence in Ujjain.",
   copyrightText: "Skin Hub Clinic. All rights reserved globally in Ujjain, India.",
   clinicPhotos: [

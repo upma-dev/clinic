@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   LogOut, PlusCircle, Trash2, BookOpen, Settings, Bell, Menu, X, Edit, 
-  Eye, FileText, CheckCircle, ChevronDown, RefreshCw, Plus, Save,
+  Eye, FileText, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, ShieldCheck, RefreshCw, Plus, Save,
   Users, DollarSign, Calendar, Clock, Lock, Upload, Sparkles, HelpCircle,
-  Briefcase, Image as ImageIcon, AlertCircle, Search
+  Briefcase, Image as ImageIcon, AlertCircle, Search, Video
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppointmentsList from './AppointmentsList';
@@ -21,7 +21,17 @@ type DoctorTab = 'overview' | 'queue' | 'prepaid' | 'settings' | 'booking-rules'
 
 export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   const [tab, setTab] = useState<DoctorTab>('overview');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [telemedicineStage, setTelemedicineStage] = useState<'confirmed' | 'pending' | 'completed' | 'all'>('confirmed');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    clinic: true,
+    content: true,
+    consult: true,
+  });
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
   const [daily, setDaily] = useState<DailyQueue | null>(null);
@@ -427,7 +437,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
     { id: 'booking-rules' as const, label: 'Booking Rules', icon: <Clock className="w-4 h-4" /> },
     { id: 'blogs' as const, label: 'Blog Manager', icon: <BookOpen className="w-4 h-4" /> },
     { id: 'cms' as const, label: 'CMS Homepage', icon: <ImageIcon className="w-4 h-4" /> },
-    { id: 'telemedicine' as const, label: 'Telemedicine', icon: <Sparkles className="w-4 h-4" /> },
+    { id: 'telemedicine' as const, label: 'Online Consultations', icon: <Video className="w-4 h-4" /> },
   ];
 
   if (loading && allBookings.length === 0) {
@@ -454,49 +464,295 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F6F8] font-sans flex flex-col lg:flex-row pb-12 lg:pb-0 select-text">
+    <div className="h-screen w-full bg-[#F4F6F8] font-sans flex flex-row overflow-hidden select-text">
       
+      {/* Floating Open Handle on Left Edge when Desktop Sidebar is Collapsed */}
+      {!sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="hidden lg:flex fixed left-0 top-1/2 -translate-y-1/2 bg-[#0B1B29] text-white p-2.5 rounded-r-2xl shadow-2xl hover:bg-[#1B4F72] transition-all z-40 items-center justify-center border-y border-r border-white/20 group cursor-pointer"
+          title="Expand Sidebar"
+        >
+          <ChevronRight className="w-5 h-5 text-emerald-300 group-hover:scale-125 transition-transform" />
+        </button>
+      )}
+
       {/* Sidebar for Desktop */}
-      <aside className="hidden lg:flex flex-col w-64 bg-[#0B1B29] text-white shrink-0 shadow-2xl border-r border-[#1B2D3D]">
-        <div className="p-6 border-b border-[#1B2D3D]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-serif font-black text-xl shadow-lg">
-              {settings?.clinicName?.charAt(0) || 'S'}
+      <aside
+        className={`
+          hidden lg:flex flex-col h-full z-30
+          bg-[#0B1B29] text-white border-r border-[#1B2D3D] flex-col justify-between
+          transition-all duration-300 ease-in-out shadow-2xl shrink-0
+          ${sidebarOpen ? 'w-64 translate-x-0' : 'w-0 overflow-hidden border-none -translate-x-full'}
+        `}
+      >
+        <div className="flex flex-col h-full overflow-hidden">
+          {/* 1. Sidebar Top Header (Branding + Collapse button) */}
+          <div className="p-4 border-b border-[#1B2D3D] flex items-center justify-between bg-[#0B1B29] shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-serif font-black text-xl shadow-lg shrink-0">
+                {settings?.clinicName?.charAt(0) || 'S'}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 leading-none">
+                    SYSTEM ADMIN
+                  </span>
+                </div>
+                <h2 className="font-playfair font-bold text-sm text-white mt-1 leading-tight truncate">
+                  {settings?.clinicName || 'Skin Hub'}
+                </h2>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] font-bold text-accent uppercase tracking-widest leading-none">Doctor portal</p>
-              <h2 className="font-playfair font-bold text-sm text-white mt-1 leading-tight line-clamp-1">
-                {settings?.clinicName || 'Skin Hub'}
-              </h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition-colors"
+              title="Collapse Sidebar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* 2. Mode Switcher Pill Control (Image 1 style) */}
+          <div className="p-3 border-b border-[#1B2D3D] bg-[#07131E] shrink-0">
+            <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-1.5 px-1">
+              Admin Console Mode
+            </div>
+            <div className="bg-[#112334] p-1 rounded-xl flex items-center gap-1 border border-white/5">
+              <button
+                onClick={() => setTab('overview')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  tab !== 'telemedicine'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Console</span>
+              </button>
+              <button
+                onClick={() => setTab('telemedicine')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  tab === 'telemedicine'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Video className="w-3.5 h-3.5" />
+                <span>Consults</span>
+              </button>
             </div>
           </div>
-        </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2.5">
-          {navItems.map((item) => (
+          {/* 3. Sidebar Navigation Items with Categories & Accordions */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {/* Category: HOME */}
+            <div>
+              <div className="flex items-center gap-2 px-2 py-1 mb-1">
+                <div className="w-1 h-3.5 bg-emerald-500 rounded-full" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
+                  HOME
+                </span>
+              </div>
+              <button
+                onClick={() => setTab('overview')}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-all ${
+                  tab === 'overview'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <span>Administrative Console</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Category: CLINIC MANAGEMENT */}
+            <div>
+              <div className="flex items-center gap-2 px-2 py-1 mb-1">
+                <div className="w-1 h-3.5 bg-teal-400 rounded-full" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
+                  CLINIC MANAGEMENT
+                </span>
+              </div>
+
+              <div className="mt-1 space-y-1">
+                <button
+                  onClick={() => toggleGroup('clinic')}
+                  className="w-full px-3 py-2 rounded-xl flex items-center justify-between text-xs font-bold text-gray-300 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Clock className="w-4 h-4 text-teal-400" />
+                    <span>Clinic Operations</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                      expandedGroups.clinic ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {expandedGroups.clinic && (
+                  <div className="pl-4 space-y-1 border-l-2 border-teal-500/30 ml-3.5">
+                    {[
+                      { id: 'queue' as const, label: 'Queue Controls', icon: <Clock className="w-3.5 h-3.5" /> },
+                      { id: 'prepaid' as const, label: 'Pre-Paid Log', icon: <DollarSign className="w-3.5 h-3.5" /> },
+                      { id: 'settings' as const, label: 'Clinic Profile', icon: <Settings className="w-3.5 h-3.5" /> },
+                      { id: 'booking-rules' as const, label: 'Booking Rules', icon: <Clock className="w-3.5 h-3.5" /> },
+                    ].map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => setTab(sub.id)}
+                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                          tab === sub.id
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className={tab === sub.id ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                          {sub.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Category: CONTENT MANAGEMENT */}
+            <div>
+              <div className="flex items-center gap-2 px-2 py-1 mb-1">
+                <div className="w-1 h-3.5 bg-sky-400 rounded-full" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
+                  CONTENT MANAGEMENT
+                </span>
+              </div>
+
+              <div className="mt-1 space-y-1">
+                <button
+                  onClick={() => toggleGroup('content')}
+                  className="w-full px-3 py-2 rounded-xl flex items-center justify-between text-xs font-bold text-gray-300 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <BookOpen className="w-4 h-4 text-sky-400" />
+                    <span>Editorial & Homepage</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                      expandedGroups.content ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {expandedGroups.content && (
+                  <div className="pl-4 space-y-1 border-l-2 border-sky-500/30 ml-3.5">
+                    {[
+                      { id: 'blogs' as const, label: 'Blog Manager', icon: <BookOpen className="w-3.5 h-3.5" /> },
+                      { id: 'cms' as const, label: 'CMS Homepage', icon: <ImageIcon className="w-3.5 h-3.5" /> },
+                    ].map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => setTab(sub.id)}
+                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                          tab === sub.id
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className={tab === sub.id ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                          {sub.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Category: CONSULTATIONS */}
+            <div>
+              <div className="flex items-center gap-2 px-2 py-1 mb-1">
+                <div className="w-1 h-3.5 bg-indigo-400 rounded-full" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
+                  CONSULTATIONS
+                </span>
+              </div>
+
+              <div className="mt-1 space-y-1">
+                <button
+                  onClick={() => toggleGroup('consult')}
+                  className="w-full px-3 py-2 rounded-xl flex items-center justify-between text-xs font-bold text-gray-300 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Video className="w-4 h-4 text-indigo-400" />
+                    <span>Online Video Consults</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                      expandedGroups.consult ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {expandedGroups.consult && (
+                  <div className="pl-4 space-y-1 border-l-2 border-indigo-500/30 ml-3.5">
+                    <button
+                      onClick={() => setTab('telemedicine')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold transition-all ${
+                        tab === 'telemedicine'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'telemedicine' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                        Video Portal
+                      </span>
+                    </button>
+
+                    {tab === 'telemedicine' && (
+                      <div className="pl-3 space-y-1 pt-1">
+                        {[
+                          { stage: 'confirmed' as const, label: '📅 Confirmed' },
+                          { stage: 'pending' as const, label: '⏳ Pending Review' },
+                          { stage: 'completed' as const, label: '✅ Completed' },
+                          { stage: 'all' as const, label: '📋 All Consultations' },
+                        ].map((sub) => (
+                          <button
+                            key={sub.stage}
+                            onClick={() => setTelemedicineStage(sub.stage)}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${
+                              telemedicineStage === sub.stage
+                                ? 'bg-emerald-400/20 text-emerald-300'
+                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            {sub.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Sidebar Footer */}
+          <div className="p-4 border-t border-[#1B2D3D] bg-[#07131E] flex items-center justify-between shrink-0">
             <button
-              key={item.id}
-              onClick={() => setTab(item.id)}
-              className={`w-full px-4 py-3 rounded-xl flex items-center gap-3 font-sans text-xs font-bold uppercase tracking-wider transition-all duration-200 outline-none ${
-                tab === item.id 
-                  ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
+              onClick={logout}
+              className="w-full px-3 py-2 rounded-xl flex items-center gap-2.5 font-sans text-xs font-bold uppercase tracking-wider text-rose-400 hover:bg-rose-500/10 transition-colors outline-none"
             >
-              {item.icon}
-              {item.label}
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
             </button>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-[#1B2D3D]">
-          <button
-            onClick={logout}
-            className="w-full px-4 py-3 rounded-xl flex items-center gap-3 font-sans text-xs font-bold uppercase tracking-wider text-rose-400 hover:bg-rose-500/10 transition-colors outline-none"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
+          </div>
         </div>
       </aside>
 
@@ -603,25 +859,37 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
         )}
       </AnimatePresence>
 
-      {/* Main Workspace */}
-      <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
+      {/* Main Workspace Right Container with Independent Vertical Scroll */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto bg-[#F4F6F8]">
+        <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
         
         {/* Top Header Row for Desktop */}
         <div className="hidden lg:flex justify-between items-center pb-4 border-b border-gray-200">
-          <div>
-            <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
-              {tab === 'overview' && 'Administrative Console'}
-              {tab === 'queue' && 'Queue Management Board'}
-              {tab === 'prepaid' && 'Online Pre-paid Log'}
-              {tab === 'settings' && 'Clinic Configuration'}
-              {tab === 'booking-rules' && 'Appointment Scheduler Toggles'}
-              {tab === 'blogs' && 'Dermatology Editorial Library'}
-              {tab === 'cms' && 'Dynamic Homepage Blocks'}
-              {tab === 'telemedicine' && 'Video Consultation Board'}
-            </h1>
-            <p className="text-xs text-gray-500 font-semibold mt-1">
-              Welcome back, Doctor. Manage active patients, clinic rules, blogs, and layouts.
-            </p>
+          <div className="flex items-center gap-3">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 transition-colors shadow-xs"
+                title="Show Sidebar"
+              >
+                <Menu className="w-5 h-5 text-gray-700" />
+              </button>
+            )}
+            <div>
+              <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
+                {tab === 'overview' && 'Administrative Console'}
+                {tab === 'queue' && 'Queue Management Board'}
+                {tab === 'prepaid' && 'Online Pre-paid Log'}
+                {tab === 'settings' && 'Clinic Configuration'}
+                {tab === 'booking-rules' && 'Appointment Scheduler Toggles'}
+                {tab === 'blogs' && 'Dermatology Editorial Library'}
+                {tab === 'cms' && 'Dynamic Homepage Blocks'}
+                {tab === 'telemedicine' && 'Online Video Consultations'}
+              </h1>
+              <p className="text-xs text-gray-500 font-semibold mt-1">
+                Welcome back, Doctor. Manage active patients, clinic rules, blogs, and layouts.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -718,106 +986,33 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
                 </div>
 
-                {/* Main Dashboard layout */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  
-                  {/* Left Column - Bookings List */}
-                  <div className="lg:col-span-8 space-y-4">
-                    <AppointmentsList
-                      bookings={allBookings}
-                      loading={false}
-                      onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason) => {
-                        const res = await fetch('/api/appointments/update', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ 
-                            id, 
-                            action, 
-                            nextScheduleDate, 
-                            newDate: rescheduleDate, 
-                            newTime: rescheduleTime, 
-                            reason: rescheduleReason 
-                          }),
-                        });
-                        if (res.ok) {
-                          const data = await res.json();
-                          triggerToast(`Action "${action}" completed`);
-                          refresh();
-                          return data; // returns { whatsappUrl } if available
-                        }
-                      }}
-                      onRefresh={refresh}
-                    />
-                  </div>
-
-                  {/* Right Column - Mini Chart + Quick Actions */}
-                  <div className="lg:col-span-4 space-y-6">
-                    
-                    {/* Chart Card */}
-                    <div className="bg-white border rounded-2xl p-5 shadow-xs">
-                      <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Patient Volume Trends</span>
-                      {renderMiniChart()}
-                    </div>
-
-                    {/* Quick Toggles */}
-                    <div className="bg-white border rounded-2xl p-5 shadow-xs space-y-4">
-                      <h3 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2">
-                        <Settings className="w-4 h-4 text-primary" />
-                        Quick Panel Actions
-                      </h3>
-                      
-                      <div className="space-y-3">
-                        
-                        {/* Enable/Disable Booking Toggle */}
-                        <div className="flex items-center justify-between p-3 border rounded-xl hover:bg-gray-50 transition-colors">
-                          <div>
-                            <p className="text-xs font-bold text-gray-800">Online Scheduler</p>
-                            <p className="text-[10px] text-gray-500 font-semibold">Enable or disable booking page</p>
-                          </div>
-                          <input 
-                            type="checkbox"
-                            checked={!!settings?.enableOnlineBooking}
-                            onChange={(e) => saveSettings({ enableOnlineBooking: e.target.checked })}
-                            className="w-5 h-5 accent-primary cursor-pointer"
-                          />
-                        </div>
-
-                        {/* Enable/Disable Approvals Toggle */}
-                        <div className="flex items-center justify-between p-3 border rounded-xl hover:bg-gray-50 transition-colors">
-                          <div>
-                            <p className="text-xs font-bold text-gray-800">Requires Approval</p>
-                            <p className="text-[10px] text-gray-500 font-semibold">Triage bookings before queue</p>
-                          </div>
-                          <input 
-                            type="checkbox"
-                            checked={!!settings?.onlineRequiresApproval}
-                            onChange={(e) => saveSettings({ onlineRequiresApproval: e.target.checked })}
-                            className="w-5 h-5 accent-primary cursor-pointer"
-                          />
-                        </div>
-
-                        {/* Advance Queue Action */}
-                        <button
-                          onClick={async () => {
-                            const res = await fetch('/api/queue/next', { method: 'POST' });
-                            if (res.ok) {
-                              const dat = await res.json();
-                              triggerToast(`Queue Advanced! Current Token: #${dat.currentToken}`);
-                              refresh();
-                            }
-                          }}
-                          className="w-full py-3 bg-gradient-to-r from-primary to-accent hover:brightness-95 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 outline-none"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          Call Next Patient
-                        </button>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
+                {/* Main Full-Width Bookings List */}
+                <div className="w-full space-y-4">
+                  <AppointmentsList
+                    bookings={allBookings}
+                    loading={false}
+                    onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason) => {
+                      const res = await fetch('/api/appointments/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          id, 
+                          action, 
+                          nextScheduleDate, 
+                          newDate: rescheduleDate, 
+                          newTime: rescheduleTime, 
+                          reason: rescheduleReason 
+                        }),
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        triggerToast(`Action "${action}" completed`);
+                        refresh();
+                        return data; // returns { whatsappUrl } if available
+                      }
+                    }}
+                    onRefresh={refresh}
+                  />
                 </div>
 
               </div>
@@ -1151,20 +1346,25 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
             {/* BOOKING SCHEDULER RULES */}
             {tab === 'booking-rules' && (
               <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-gray-200 pb-4">
+                {/* Simple Booking Rules & Settings Header */}
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                   <div>
-                    <h2 className="font-playfair text-2xl font-black text-gray-900">Online Scheduler & Notification Rules</h2>
-                    <p className="text-xs text-gray-500 font-semibold mt-0.5">Configure booking buffers, active consultation days, and automated email templates.</p>
+                    <h2 className="font-playfair text-2xl font-black text-gray-900 flex items-center gap-2">
+                      <Clock className="w-6 h-6 text-primary" /> Booking Rules & Clinic Timings
+                    </h2>
+                    <p className="text-xs text-gray-500 font-semibold mt-1">
+                      Configure clinic opening hours, consultation time per patient, daily limits, and working days.
+                    </p>
                   </div>
                   {settings && (
                     <button
                       type="button"
                       disabled={loading}
                       onClick={() => saveSettings(settings)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all outline-none cursor-pointer shrink-0"
+                      className="px-6 py-3 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-md transition-all outline-none cursor-pointer shrink-0"
                     >
-                      <Save className="w-4 h-4" />
-                      Save Scheduler Constraints
+                      <Save className="w-4 h-4 text-emerald-300" />
+                      Save Booking Rules
                     </button>
                   )}
                 </div>
@@ -1174,132 +1374,145 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                       
-                      {/* Thresholds Card */}
-                      <div className="lg:col-span-6 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                      {/* Clinic Timings & Limits Card */}
+                      <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
                         <div className="flex items-center gap-3 border-b pb-3">
                           <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
                             <Clock className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Scheduling Thresholds & Limits</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Time buffer, slot duration, and daily limits</p>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Timings & Patient Limits</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Set daily patient capacity and consultation time</p>
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Booking Buffer (Hours)</label>
-                            <input 
-                              type="number"
-                              value={settings.bookingBufferHours}
-                              onChange={(e) => setSettings({ ...settings, bookingBufferHours: Number(e.target.value) })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-blue-500 outline-none transition-all"
-                              placeholder="e.g. 2"
-                            />
-                          </div>
-                          
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Slot Duration (Minutes)</label>
-                            <input 
-                              type="number"
-                              value={settings.onlineSlotDuration}
-                              onChange={(e) => setSettings({ ...settings, onlineSlotDuration: Number(e.target.value) })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-blue-500 outline-none transition-all"
-                              placeholder="e.g. 20"
-                            />
+                        {/* Consultation Time Per Patient */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-gray-800 block">
+                            Consultation Time Per Patient
+                          </label>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[15, 20, 30, 45].map((mins) => (
+                              <button
+                                type="button"
+                                key={mins}
+                                onClick={() => setSettings({ ...settings, onlineSlotDuration: mins })}
+                                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                  settings.onlineSlotDuration === mins
+                                    ? 'bg-primary text-white border-primary shadow-xs'
+                                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                }`}
+                              >
+                                {mins} Mins
+                              </button>
+                            ))}
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                          {/* Max Patients Per Day */}
                           <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Online Max Daily Limit</label>
+                            <label className="text-xs font-bold text-gray-800 mb-1.5">Max Patients Per Day</label>
                             <input 
                               type="number"
                               value={settings.onlineMaxDailyBooking}
                               onChange={(e) => setSettings({ ...settings, onlineMaxDailyBooking: Number(e.target.value) })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-blue-500 outline-none transition-all"
-                              placeholder="e.g. 15"
+                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
+                              placeholder="e.g. 15 Patients"
                             />
                           </div>
-
+                          
+                          {/* Advance Notice Needed */}
                           <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Booking Cutoff Time</label>
-                            <div className="flex gap-1.5">
+                            <label className="text-xs font-bold text-gray-800 mb-1.5">Advance Notice Required</label>
+                            <select
+                              value={settings.bookingBufferHours}
+                              onChange={(e) => setSettings({ ...settings, bookingBufferHours: Number(e.target.value) })}
+                              className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
+                            >
+                              <option value={0}>Same Time Allowed</option>
+                              <option value={2}>2 Hours Advance</option>
+                              <option value={6}>6 Hours Advance</option>
+                              <option value={12}>12 Hours Advance</option>
+                              <option value={24}>24 Hours Advance</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Clinic Opening & Closing Time */}
+                        <div className="pt-2 border-t border-gray-150 space-y-3">
+                          <label className="text-xs font-bold text-gray-800 block">Clinic Opening & Closing Hours</label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Opening Time</span>
                               <input 
-                                type="number" 
-                                value={settings.bookingCutoffHour} 
-                                onChange={(e) => setSettings({ ...settings, bookingCutoffHour: Number(e.target.value) })}
-                                placeholder="19"
-                                className="w-1/2 text-center border rounded-xl py-2.5 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-blue-500 outline-none"
+                                type="time" 
+                                value={settings.onlineStart || '09:00'} 
+                                onChange={(e) => setSettings({ ...settings, onlineStart: e.target.value })}
+                                className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
                               />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Closing Time</span>
                               <input 
-                                type="number" 
-                                value={settings.bookingCutoffMinute} 
-                                onChange={(e) => setSettings({ ...settings, bookingCutoffMinute: Number(e.target.value) })}
-                                placeholder="30"
-                                className="w-1/2 text-center border rounded-xl py-2.5 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-blue-500 outline-none"
+                                type="time" 
+                                value={settings.onlineEnd || '18:00'} 
+                                onChange={(e) => setSettings({ ...settings, onlineEnd: e.target.value })}
+                                className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
                               />
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Online Session Operating Window</label>
-                          <div className="flex gap-2">
-                            <input 
-                              type="text" 
-                              value={settings.onlineStart} 
-                              onChange={(e) => setSettings({ ...settings, onlineStart: e.target.value })}
-                              placeholder="10:00"
-                              className="w-1/2 text-center border rounded-xl py-2.5 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-blue-500 outline-none"
-                            />
-                            <input 
-                              type="text" 
-                              value={settings.onlineEnd} 
-                              onChange={(e) => setSettings({ ...settings, onlineEnd: e.target.value })}
-                              placeholder="18:00"
-                              className="w-1/2 text-center border rounded-xl py-2.5 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                        </div>
                       </div>
 
-                      {/* Active Days Card */}
-                      <div className="lg:col-span-6 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                      {/* Working Days Card */}
+                      <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
                         <div className="flex items-center gap-3 border-b pb-3">
                           <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
                             <Calendar className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Active Weekly Consultation Days</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Select days when online appointment slots are open</p>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Working Days</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Toggle open & closed days for appointments</p>
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2">
+                        <div className="space-y-2 pt-1">
                           {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
-                            const isOnlineChecked = settings.onlineDays?.includes(day);
+                            const isOpen = settings.onlineDays?.includes(day);
                             return (
                               <label 
                                 key={day} 
                                 className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${
-                                  isOnlineChecked 
-                                    ? 'bg-emerald-50/90 border-emerald-500 text-emerald-950 shadow-2xs font-bold' 
-                                    : 'bg-gray-50/50 border-gray-200 text-gray-600 hover:bg-gray-50'
+                                  isOpen 
+                                    ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs' 
+                                    : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
                                 }`}
                               >
-                                <span className="text-xs">{day}</span>
-                                <input 
-                                  type="checkbox"
-                                  checked={isOnlineChecked}
-                                  onChange={(e) => {
-                                    const nextDays = e.target.checked 
-                                      ? [...(settings.onlineDays || []), day]
-                                      : (settings.onlineDays || []).filter(d => d !== day);
-                                    setSettings({ ...settings, onlineDays: nextDays });
-                                  }}
-                                  className="w-4 h-4 accent-emerald-600 rounded"
-                                />
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2.5 h-2.5 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                                  <span className="text-xs font-bold">{day}</span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                    isOpen ? 'bg-emerald-200 text-emerald-800' : 'bg-gray-200 text-gray-600'
+                                  }`}>
+                                    {isOpen ? 'Clinic Open' : 'Closed'}
+                                  </span>
+                                  <input 
+                                    type="checkbox"
+                                    checked={isOpen}
+                                    onChange={(e) => {
+                                      const nextDays = e.target.checked 
+                                        ? [...(settings.onlineDays || []), day]
+                                        : (settings.onlineDays || []).filter(d => d !== day);
+                                      setSettings({ ...settings, onlineDays: nextDays });
+                                    }}
+                                    className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                                  />
+                                </div>
                               </label>
                             );
                           })}
@@ -1308,60 +1521,42 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
                     </div>
 
-                    {/* Email templates Card */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-6 hover:shadow-md transition-all">
+                    {/* Automated Messages Card */}
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
                       <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-2">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
                             <Sparkles className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Automated Notification Message Templates</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Custom trigger templates dispatched to patients</p>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Automated Patient Message Templates</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Custom SMS & WhatsApp templates sent automatically to patients</p>
                           </div>
-                        </div>
-                      </div>
-
-                      {/* Tag Legend Card */}
-                      <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-1.5">
-                        <span className="text-[9px] font-black text-amber-900 uppercase tracking-widest">Available Dynamic Tags:</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {['{name}', '{date}', '{time}', '{id}', '{token}', '{amount}', '{newDate}', '{newTime}', '{reason}', '{confirmUrl}', '{doctorName}', '{address}', '{notes}'].map(tag => (
-                            <span key={tag} className="px-2 py-0.5 bg-white border border-amber-200 text-amber-900 text-[10px] font-mono font-bold rounded shadow-2xs">
-                              {tag}
-                            </span>
-                          ))}
                         </div>
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        
                         {[
-                          { key: 'booked', label: 'Appointment Booked' },
-                          { key: 'confirmed', label: 'Appointment Confirmed' },
-                          { key: 'paymentSuccess', label: 'Payment Successful' },
-                          { key: 'paymentFailed', label: 'Payment Failed' },
-                          { key: 'cancelled', label: 'Appointment Cancelled' },
-                          { key: 'rescheduled', label: 'Appointment Rescheduled' },
-                          { key: 'doctorDelayed', label: 'Doctor Delayed Alert' },
-                          { key: 'reminderBefore', label: 'Reminder Before Slot' },
-                          { key: 'followUp', label: 'Follow-up Reminder' },
-                          { key: 'prescriptionReady', label: 'Prescription Released' },
+                          { key: 'booked', label: '📩 Booking Confirmation Message' },
+                          { key: 'confirmed', label: '✅ Appointment Approved' },
+                          { key: 'cancelled', label: '❌ Cancellation Notice' },
+                          { key: 'rescheduled', label: '🔄 Rescheduled Date Notice' },
+                          { key: 'reminderBefore', label: '⏰ 1-Hour Before Reminder' },
+                          { key: 'prescriptionReady', label: '📄 Prescription PDF Ready' },
                         ].map(tmpl => (
-                          <div key={tmpl.key} className="bg-gray-50/60 border border-gray-200/80 rounded-xl p-4 space-y-2 hover:border-primary/40 transition-colors">
-                            <label className="text-[10px] font-black text-gray-700 uppercase tracking-wider block">{tmpl.label}</label>
+                          <div key={tmpl.key} className="bg-gray-50/60 border border-gray-200 rounded-xl p-4 space-y-2 hover:border-primary/40 transition-colors">
+                            <label className="text-xs font-bold text-gray-800 block">{tmpl.label}</label>
                             <textarea
-                              rows={4}
+                              rows={3}
                               value={(settings.emailTemplates as any)?.[tmpl.key] || ''}
                               onChange={(e) => setSettings({
                                 ...settings,
                                 emailTemplates: { ...(settings.emailTemplates || {} as any), [tmpl.key]: e.target.value }
                               })}
-                              className="w-full p-3 border rounded-xl text-xs font-semibold resize-none outline-none focus:border-primary focus:bg-white bg-white/80 transition-all"
+                              className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium resize-none outline-none focus:border-primary focus:bg-white bg-white transition-all"
                             />
                           </div>
                         ))}
-
                       </div>
                     </div>
 
@@ -1369,10 +1564,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                       type="button"
                       disabled={loading}
                       onClick={() => saveSettings(settings)}
-                      className="w-full py-4 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md outline-none cursor-pointer text-xs uppercase tracking-wider"
+                      className="w-full py-4 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md outline-none cursor-pointer text-xs uppercase tracking-wider transition-all"
                     >
-                      <Save className="w-4 h-4" />
-                      Save Scheduler Constraints
+                      <Save className="w-4 h-4 text-emerald-300" />
+                      Save Booking Rules Settings
                     </button>
                   </form>
                 )}
@@ -2059,10 +2254,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               </div>
             )}
 
-            {/* TELEMEDICINE BOARD */}
+            {/* ONLINE CONSULTATIONS BOARD */}
             {tab === 'telemedicine' && (
-              <div className="max-w-4xl mx-auto -mx-4 sm:mx-0">
-                <DoctorTelemedicineView />
+              <div className="w-full space-y-4">
+                <DoctorTelemedicineView initialStage={telemedicineStage} onStageChange={setTelemedicineStage} />
               </div>
             )}
 
@@ -2070,6 +2265,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
         </AnimatePresence>
 
       </main>
+      </div>
 
       {/* Mobile Drawer Notification Tray */}
       <AnimatePresence>

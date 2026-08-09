@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import type { Booking, PaymentStatus, BookingStatus } from '@/lib/types';
 import { 
   CheckCircle2, XCircle, UserCheck, UserX, Search, Filter, 
-  Calendar, Phone, CreditCard, ChevronDown, CheckSquare, Clock, FileText, RefreshCw, MessageCircle, Video 
+  Calendar, Phone, CreditCard, ChevronDown, ChevronRight, ChevronLeft, CheckSquare, Clock, FileText, RefreshCw, MessageCircle, Video, List, LayoutGrid 
 } from 'lucide-react';
 
 interface AppointmentsListProps {
@@ -31,7 +31,12 @@ export default function AppointmentsList({
   onRefresh,
 }: AppointmentsListProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterType>('approval');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(50);
+
   const [followUpDates, setFollowUpDates] = useState<Record<string, string>>({});
   const [showFollowUpInput, setShowFollowUpInput] = useState<Record<string, boolean>>({});
 
@@ -418,7 +423,7 @@ export default function AppointmentsList({
           <p className="text-[11px] text-gray-500 font-semibold">Triage bookings, update check-ins, and check payment status</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <Search className="w-3.5 h-3.5" />
@@ -427,10 +432,36 @@ export default function AppointmentsList({
               type="text"
               placeholder="Search ID, Name, Phone..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-9 pr-4 py-2 border rounded-xl text-xs font-semibold w-full sm:w-60 focus:outline-none focus:border-primary"
             />
           </div>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'table' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
+              }`}
+              title="Table List View"
+            >
+              <List className="w-3.5 h-3.5" /> Table List
+            </button>
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'cards' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
+              }`}
+              title="Grid Cards View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" /> Cards
+            </button>
+          </div>
+
           <button
             onClick={exportToCSV}
             className="text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200 rounded-xl px-3 py-2 hover:bg-teal-100 transition-colors cursor-pointer"
@@ -451,7 +482,10 @@ export default function AppointmentsList({
       <div className="flex flex-wrap gap-1.5 border-b pb-4">
         {/* Pending Approval tab — shown first & highlighted */}
         <button
-          onClick={() => setActiveFilter('approval')}
+          onClick={() => {
+            setActiveFilter('approval');
+            setCurrentPage(1);
+          }}
           className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${
             activeFilter === 'approval'
               ? 'bg-amber-500 border-amber-500 text-white'
@@ -481,7 +515,10 @@ export default function AppointmentsList({
         ].map((f) => (
           <button
             key={f.id}
-            onClick={() => setActiveFilter(f.id as FilterType)}
+            onClick={() => {
+              setActiveFilter(f.id as FilterType);
+              setCurrentPage(1);
+            }}
             className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
               activeFilter === f.id
                 ? 'bg-[#1B4F72] border-[#1B4F72] text-white'
@@ -495,369 +532,454 @@ export default function AppointmentsList({
 
       {/* Bookings List mapping */}
       {filteredBookings.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 font-semibold text-xs">
+        <div className="text-center py-12 text-gray-500 font-semibold text-xs bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
           No records matched the selected query search filter.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredBookings.map((bk) => (
-            <div
-              key={bk.id}
-              className="p-4 border border-gray-100 rounded-2xl bg-gray-50/50 hover:bg-gray-50 transition-colors flex flex-col justify-between space-y-4 shadow-2xs hover:shadow-xs"
-            >
-              <div className="space-y-2">
-                {/* Header line: status + payment badges */}
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {getStatusBadge(bk.status)}
-                    {getPaymentBadge(bk.paymentStatus)}
-                    {bk.source === 'walk-in' ? (
-                      <span className="px-2 py-0.5 rounded bg-gray-150 border border-gray-300 text-gray-700 text-[10px] font-bold uppercase tracking-wider">🚶 Walk-in</span>
-                    ) : bk.bookingType === 'online' ? (
-                      <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wider">🌐 Online Video</span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-250 text-amber-800 text-[10px] font-bold uppercase tracking-wider">🏥 Clinic Visit</span>
-                    )}
-                  </div>
-                  <span className="font-mono text-[9px] font-black text-gray-400 bg-white border px-2 py-0.5 rounded shadow-2xs">
-                    {bk.id}
-                  </span>
-                </div>
+        <>
+          {/* TABLE LIST VIEW */}
+          {viewMode === 'table' ? (
+            <div className="overflow-x-auto border border-gray-200 rounded-2xl bg-white shadow-xs">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50/80 border-b border-gray-200 text-gray-600 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="py-3.5 px-4"># ID</th>
+                    <th className="py-3.5 px-4">Patient Name</th>
+                    <th className="py-3.5 px-4">Date & Time</th>
+                    <th className="py-3.5 px-4">Service</th>
+                    <th className="py-3.5 px-4">Type</th>
+                    <th className="py-3.5 px-4">Payment</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-150">
+                  {filteredBookings
+                    .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                    .map((bk) => {
+                      const isExpanded = expandedRowId === bk.id;
+                      return (
+                        <React.Fragment key={bk.id}>
+                          <tr 
+                            className={`hover:bg-blue-50/40 transition-colors ${
+                              isExpanded ? 'bg-blue-50/20' : ''
+                            }`}
+                          >
+                            <td className="py-3.5 px-4 font-mono font-bold text-[11px] text-gray-500">
+                              {bk.id}
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-gray-900">
+                              <div className="font-bold text-gray-900">{bk.name}</div>
+                              <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3 text-gray-400" /> {bk.phone}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold whitespace-nowrap">
+                              <div className="text-gray-900">{bk.date}</div>
+                              <div className="text-[11px] text-primary font-bold">{bk.time}</div>
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-gray-800">
+                              <span className="text-primary font-bold">{bk.service}</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {bk.source === 'walk-in' ? (
+                                <span className="px-2 py-0.5 rounded bg-gray-150 border border-gray-300 text-gray-700 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">🚶 Walk-in</span>
+                              ) : bk.bookingType === 'online' ? (
+                                <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">🌐 Online</span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-250 text-amber-800 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">🏥 Clinic</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {getPaymentBadge(bk.paymentStatus)}
+                              {bk.amountPaid && (
+                                <div className="text-[10px] font-bold text-gray-600 mt-0.5">₹{bk.amountPaid}</div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {getStatusBadge(bk.status)}
+                            </td>
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Quick Action Buttons */}
+                                {bk.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleActionWithWA(bk.id, 'confirm', undefined, undefined, undefined, undefined, bk.name)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold uppercase"
+                                    title="Confirm Slot"
+                                  >
+                                    Confirm
+                                  </button>
+                                )}
+                                {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
+                                  <button
+                                    onClick={() => {
+                                      if (bk.paymentStatus === 'paid') {
+                                        handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name);
+                                      } else {
+                                        setPaymentPromptBooking(bk);
+                                      }
+                                    }}
+                                    className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold uppercase"
+                                    title="Check In Patient"
+                                  >
+                                    Check In
+                                  </button>
+                                )}
+                                {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online')) && !showFollowUpInput[bk.id] && (
+                                  <button
+                                    onClick={() => setShowFollowUpInput({ ...showFollowUpInput, [bk.id]: true })}
+                                    className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold uppercase"
+                                    title="Complete Session"
+                                  >
+                                    Complete
+                                  </button>
+                                )}
 
-                {/* Patient Information block */}
-                <div className="space-y-1 text-xs">
-                  <p className="font-bold text-gray-900 text-sm">{bk.name}</p>
-                  <p className="text-gray-600 font-semibold">
-                    {bk.date} at {bk.time} • <span className="text-primary font-bold">{bk.service}</span>
-                  </p>
-                  <p className="text-gray-500 font-semibold flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-gray-400" /> {bk.phone}
-                    {bk.email && ` • ${bk.email}`}
-                  </p>
-                  
-                  {/* Intake diagnostics preview */}
-                  {(bk.age || bk.gender || bk.skinType) && (
-                    <p className="text-[10px] text-gray-600 font-semibold bg-white border border-gray-150 p-2 rounded-lg mt-1">
-                      {bk.age && `Age: ${bk.age}`} {bk.gender && ` • Gender: ${bk.gender}`} {bk.skinType && ` • Skin: ${bk.skinType}`}
-                    </p>
-                  )}
-                  {bk.problemDescription && (
-                    <div className="bg-white border border-gray-150 p-2.5 rounded-lg text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-1">
-                      <p className="text-[9px] uppercase font-black tracking-widest text-primary">Problem Condition:</p>
-                      <p>{bk.problemDescription}</p>
-                      {bk.previousMedication && (
-                        <>
-                          <p className="text-[9px] uppercase font-black tracking-widest text-accent mt-2">Previous Meds:</p>
-                          <p className="italic text-gray-600">{bk.previousMedication}</p>
-                        </>
-                      )}
-                      {bk.images && bk.images.length > 0 && (
-                        <div className="pt-2 flex gap-2 overflow-x-auto">
-                          {bk.images.map((imgUrl, idx) => (
-                            <a key={idx} href={imgUrl} target="_blank" rel="noopener noreferrer" className="block relative w-10 h-10 border rounded overflow-hidden shadow-2xs">
-                              <img src={imgUrl} className="w-full h-full object-cover" alt="Patient Skin Concern" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {bk.appointmentNotes && (
-                    <p className="text-[10px] text-gray-500 font-semibold italic bg-amber-50/50 p-2 rounded border border-amber-100 mt-1">
-                      Notes: {bk.appointmentNotes}
-                    </p>
-                  )}
-                  {bk.nextScheduleDate && (
-                    <p className="text-[10px] text-teal-800 font-black uppercase tracking-wider bg-teal-50 border border-teal-150 p-2 rounded mt-1 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" /> Next Follow-up: {bk.nextScheduleDate}
-                    </p>
-                  )}
+                                {/* Row Details Toggle Button */}
+                                <button
+                                  onClick={() => setExpandedRowId(isExpanded ? null : bk.id)}
+                                  className={`p-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-all ${
+                                    isExpanded ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border-gray-200'
+                                  }`}
+                                >
+                                  {isExpanded ? 'Hide' : 'Details'}
+                                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
 
-                  {/* Payment Metadata section */}
-                  {bk.payOnline && (
-                    <div className="bg-emerald-50/20 border border-emerald-100 p-2.5 rounded-xl text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-2 text-left">
-                      <p className="text-[9px] uppercase font-black tracking-widest text-[#0D9488]">Pre-Payment Metadata:</p>
-                      <p>Amount: <span className="font-bold text-gray-900">₹{bk.amountPaid || 500}</span></p>
-                      {bk.razorpayOrderId && <p>Order ID: <span className="font-mono text-gray-500">{bk.razorpayOrderId}</span></p>}
-                      {bk.razorpayPaymentId && <p>Transaction ID: <span className="font-mono text-gray-500">{bk.razorpayPaymentId}</span></p>}
-                      {bk.paidAt && <p>Paid At: <span className="text-gray-500">{new Date(bk.paidAt).toLocaleString()}</span></p>}
-                    </div>
-                  )}
+                          {/* EXPANDABLE ROW DRAWER */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={8} className="p-4 bg-slate-50 border-b border-gray-200">
+                                <div className="space-y-3 font-sans text-xs">
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    
+                                    {/* Column 1: Patient Diagnostic Details */}
+                                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2">
+                                      <p className="text-[10px] font-black uppercase text-primary tracking-wider">Patient Intake & Diagnostics</p>
+                                      {(bk.age || bk.gender || bk.skinType) && (
+                                        <p className="text-gray-700 font-semibold">
+                                          {bk.age && `Age: ${bk.age}`} {bk.gender && ` • Gender: ${bk.gender}`} {bk.skinType && ` • Skin: ${bk.skinType}`}
+                                        </p>
+                                      )}
+                                      {bk.problemDescription ? (
+                                        <p className="text-gray-600"><strong>Problem:</strong> {bk.problemDescription}</p>
+                                      ) : (
+                                        <p className="text-gray-400 italic">No problem description submitted.</p>
+                                      )}
+                                      {bk.previousMedication && (
+                                        <p className="text-gray-600"><strong>Previous Meds:</strong> {bk.previousMedication}</p>
+                                      )}
+                                    </div>
 
-                  {/* Telemedicine Details section */}
-                  {bk.bookingType === 'online' && bk.meetingLink && (
-                    <div className="bg-teal-50/20 border border-teal-100 p-2.5 rounded-xl text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-2 text-left">
-                      <p className="text-[9px] uppercase font-black tracking-widest text-teal-700">Video Consultation Link:</p>
-                      <p>Meeting URL: <a href={bk.meetingLink} target="_blank" rel="noopener noreferrer" className="text-[#1B4F72] hover:underline font-bold">{bk.meetingLink}</a></p>
-                      {bk.meetingPassword && <p>Password: <span className="font-bold text-gray-900">{bk.meetingPassword}</span></p>}
-                    </div>
-                  )}
+                                    {/* Column 2: Payment & Booking Metadata */}
+                                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2">
+                                      <p className="text-[10px] font-black uppercase text-teal-700 tracking-wider">Payment Metadata</p>
+                                      <p className="text-gray-700 font-semibold">Amount: <span className="font-bold text-gray-900">₹{bk.amountPaid || (bk.paymentStatus === 'Paid' ? 700 : 0)}</span></p>
+                                      {bk.razorpayOrderId && <p className="text-gray-600">Order ID: <span className="font-mono text-gray-500">{bk.razorpayOrderId}</span></p>}
+                                      {bk.razorpayPaymentId && <p className="text-gray-600">Transaction ID: <span className="font-mono text-gray-500">{bk.razorpayPaymentId}</span></p>}
+                                      {bk.paidAt && <p className="text-gray-600">Paid At: <span className="text-gray-500">{new Date(bk.paidAt).toLocaleString()}</span></p>}
+                                    </div>
 
-                  {/* Payment Timeline Stepper */}
-                  <div className="pt-3 border-t mt-2">
-                    <p className="text-[8px] uppercase font-black text-gray-400 tracking-wider mb-2">Payment Timeline:</p>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <div className="flex items-center text-[9px] font-bold">
-                        <span className="w-3.5 h-3.5 rounded-full bg-emerald-600 flex items-center justify-center text-[7px] text-white">✓</span>
-                        <span className="ml-1 text-gray-750">Booked</span>
-                      </div>
-                      <span className="w-3 h-0.5 bg-gray-200"></span>
-                      <div className="flex items-center text-[9px] font-bold">
-                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] text-white ${
-                          String(bk.paymentStatus).toLowerCase() === 'paid' ? 'bg-emerald-600' :
-                          String(bk.paymentStatus).toLowerCase() === 'failed' ? 'bg-rose-500' :
-                          'bg-amber-400'
-                        }`}>
-                          {String(bk.paymentStatus).toLowerCase() === 'paid' ? '✓' : '!'}
-                        </span>
-                        <span className="ml-1 text-gray-750">{bk.paymentStatus || 'Pending'}</span>
-                      </div>
-                      {String(bk.paymentStatus).toLowerCase() === 'refunded' && (
-                        <>
-                          <span className="w-3 h-0.5 bg-gray-200"></span>
-                          <div className="flex items-center text-[9px] font-bold text-rose-600">
-                            <span className="w-3.5 h-3.5 rounded-full bg-rose-600 flex items-center justify-center text-[7px] text-white">↺</span>
-                            <span className="ml-1">Refunded</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                                    {/* Column 3: Full Actions Panel */}
+                                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2">
+                                      <p className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Full Actions</p>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {/* Send WhatsApp */}
+                                        <button
+                                          onClick={() => {
+                                            const msg = `*Skin Hub Clinic Notification*\n\nHello ${bk.name}, regarding your booking #${bk.id} on ${bk.date} at ${bk.time}.`;
+                                            const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                                            window.open(waUrl, '_blank');
+                                          }}
+                                          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                        >
+                                          <MessageCircle className="w-3 h-3" /> WhatsApp
+                                        </button>
 
-              {/* Action row with conditional operations */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-gray-150 mt-auto">
-                
-                {/* Completion follow-up scheduler sheet */}
-                {showFollowUpInput[bk.id] && (
-                  <div className="p-4 bg-white border border-gray-200 rounded-2xl space-y-3 font-sans text-xs shadow-md animate-fade-in-up">
-                    <div className="flex items-center gap-2 border-b pb-2">
-                      <Calendar className="w-4 h-4 text-teal-600" />
-                      <label className="text-[10px] font-black text-gray-800 uppercase tracking-widest">
-                        Choose Follow-up Date (Dispatches Email)
-                      </label>
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="date"
-                        min={todayStr}
-                        value={followUpDates[bk.id] || ''}
-                        onChange={(e) => setFollowUpDates({ ...followUpDates, [bk.id]: e.target.value })}
-                        className="flex-1 px-3 py-2 border rounded-xl font-semibold text-xs outline-none bg-gray-50 focus:bg-white focus:border-teal-500 transition-all"
-                      />
-                      <button
-                        onClick={() => {
-                          onAction(bk.id, 'complete', followUpDates[bk.id]);
-                          setShowFollowUpInput({ ...showFollowUpInput, [bk.id]: false });
-                        }}
-                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl uppercase text-[10px] tracking-wider outline-none shadow-xs transition-all cursor-pointer"
-                      >
-                        Complete Session
-                      </button>
-                    </div>
-                  </div>
-                )}
+                                        {/* Reschedule */}
+                                        {bk.status !== 'cancelled' && bk.status !== 'completed' && (
+                                          <button
+                                            onClick={() => setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: true })}
+                                            className="px-3 py-1.5 bg-[#1B4F72] hover:brightness-110 text-white rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                          >
+                                            <Clock className="w-3 h-3" /> Reschedule
+                                          </button>
+                                        )}
 
-                {/* Reschedule scheduler sheet */}
-                {showRescheduleInput[bk.id] && (
-                  <form 
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleActionWithWA(
-                        bk.id, 
-                        'reschedule', 
-                        undefined, 
-                        rescheduleDates[bk.id], 
-                        rescheduleTimes[bk.id], 
-                        rescheduleReasons[bk.id],
-                        bk.name
+                                        {/* Cancel */}
+                                        {bk.status !== 'cancelled' && bk.status !== 'completed' && (
+                                          <button
+                                            onClick={() => onAction(bk.id, 'cancel')}
+                                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                          >
+                                            <XCircle className="w-3 h-3" /> Cancel
+                                          </button>
+                                        )}
+
+                                        {/* Invoice */}
+                                        {bk.payOnline && (
+                                          <button
+                                            onClick={() => window.open(`/api/appointments/invoice?id=${bk.id}`, '_blank')}
+                                            className="px-3 py-1.5 bg-gray-150 hover:bg-gray-200 text-gray-700 border rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                          >
+                                            <FileText className="w-3 h-3 text-gray-500" /> Invoice
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+
+                                  {/* MongoDB Document Inspector matching Compass view */}
+                                  <div className="bg-[#0B1B29] text-emerald-400 p-4 rounded-xl font-mono text-[11px] overflow-x-auto border border-gray-800 space-y-1 shadow-inner mt-3">
+                                    <div className="flex items-center justify-between text-gray-400 text-[10px] pb-2 border-b border-gray-800 mb-2">
+                                      <span className="flex items-center gap-1 font-bold text-emerald-300">
+                                        🍃 MongoDB Document: skinhub.bookings ({bk.name})
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => navigator.clipboard.writeText(JSON.stringify(bk, null, 2))}
+                                        className="text-[10px] text-teal-300 hover:text-white underline cursor-pointer"
+                                      >
+                                        Copy Document JSON
+                                      </button>
+                                    </div>
+                                    {Object.entries(bk).map(([key, val]) => (
+                                      <div key={key} className="flex gap-2 py-0.5 border-b border-gray-800/30">
+                                        <span className="text-gray-400 min-w-[170px] shrink-0 font-bold">{key} :</span>
+                                        <span className={typeof val === 'number' || typeof val === 'boolean' ? 'text-blue-300 font-bold' : 'text-emerald-300'}>
+                                          {typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {/* Reschedule Form if open */}
+                                  {showRescheduleInput[bk.id] && (
+                                    <form 
+                                      onSubmit={(e) => {
+                                        e.preventDefault();
+                                        handleActionWithWA(
+                                          bk.id, 
+                                          'reschedule', 
+                                          undefined, 
+                                          rescheduleDates[bk.id], 
+                                          rescheduleTimes[bk.id], 
+                                          rescheduleReasons[bk.id],
+                                          bk.name
+                                        );
+                                        setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: false });
+                                      }} 
+                                      className="p-3 bg-blue-50/50 border border-blue-200 rounded-xl space-y-2 text-xs"
+                                    >
+                                      <p className="font-bold text-primary text-[11px]">Reschedule Appointment Slot</p>
+                                      <div className="grid grid-cols-3 gap-2">
+                                        <input
+                                          required
+                                          type="date"
+                                          min={todayStr}
+                                          value={rescheduleDates[bk.id] || ''}
+                                          onChange={(e) => setRescheduleDates({ ...rescheduleDates, [bk.id]: e.target.value })}
+                                          className="p-2 border rounded-lg text-xs"
+                                        />
+                                        <input
+                                          required
+                                          type="text"
+                                          placeholder="e.g. 10:30 AM"
+                                          value={rescheduleTimes[bk.id] || ''}
+                                          onChange={(e) => setRescheduleTimes({ ...rescheduleTimes, [bk.id]: e.target.value })}
+                                          className="p-2 border rounded-lg text-xs"
+                                        />
+                                        <input
+                                          required
+                                          type="text"
+                                          placeholder="Reason for reschedule"
+                                          value={rescheduleReasons[bk.id] || ''}
+                                          onChange={(e) => setRescheduleReasons({ ...rescheduleReasons, [bk.id]: e.target.value })}
+                                          className="p-2 border rounded-lg text-xs"
+                                        />
+                                      </div>
+                                      <div className="flex justify-end gap-2">
+                                        <button type="submit" className="px-3 py-1.5 bg-primary text-white font-bold rounded-lg text-[10px]">
+                                          Confirm Reschedule
+                                        </button>
+                                        <button type="button" onClick={() => setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: false })} className="px-3 py-1.5 border rounded-lg text-[10px]">
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </form>
+                                  )}
+
+                                  {/* Follow Up Completion Form if open */}
+                                  {showFollowUpInput[bk.id] && (
+                                    <div className="p-3 bg-teal-50/50 border border-teal-200 rounded-xl space-y-2 text-xs">
+                                      <p className="font-bold text-teal-800 text-[11px]">Choose Follow-up Date & Complete Session</p>
+                                      <div className="flex gap-2">
+                                        <input
+                                          type="date"
+                                          min={todayStr}
+                                          value={followUpDates[bk.id] || ''}
+                                          onChange={(e) => setFollowUpDates({ ...followUpDates, [bk.id]: e.target.value })}
+                                          className="p-2 border rounded-lg text-xs flex-1"
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            onAction(bk.id, 'complete', followUpDates[bk.id]);
+                                            setShowFollowUpInput({ ...showFollowUpInput, [bk.id]: false });
+                                          }}
+                                          className="px-3 py-1.5 bg-teal-600 text-white font-bold rounded-lg text-[10px]"
+                                        >
+                                          Complete Session
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
-                      setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: false });
-                    }} 
-                    className="p-4 bg-white border border-gray-200 rounded-2xl space-y-3 font-sans text-xs text-left shadow-md animate-fade-in-up"
-                  >
-                    <div className="flex items-center gap-2 border-b pb-2">
-                      <Clock className="w-4 h-4 text-[#1B4F72]" />
-                      <p className="font-black text-gray-800 uppercase text-[10px] tracking-wider">
-                        Reschedule Appointment Slot
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div className="flex flex-col">
-                        <label className="text-[9px] text-gray-500 font-bold mb-1">New Date</label>
-                        <input
-                          required
-                          type="date"
-                          min={todayStr}
-                          value={rescheduleDates[bk.id] || ''}
-                          onChange={(e) => setRescheduleDates({ ...rescheduleDates, [bk.id]: e.target.value })}
-                          className="px-3 py-2 border rounded-xl font-semibold text-xs outline-none bg-gray-50 focus:bg-white focus:border-primary transition-all"
-                        />
-                      </div>
-                      <div className="flex flex-col">
-                        <label className="text-[9px] text-gray-500 font-bold mb-1">New Time Slot</label>
-                        <input
-                          required
-                          type="text"
-                          placeholder="e.g. 10:30 AM"
-                          value={rescheduleTimes[bk.id] || ''}
-                          onChange={(e) => setRescheduleTimes({ ...rescheduleTimes, [bk.id]: e.target.value })}
-                          className="px-3 py-2 border rounded-xl font-semibold text-xs outline-none bg-gray-50 focus:bg-white focus:border-primary transition-all"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-col">
-                      <label className="text-[9px] text-gray-500 font-bold mb-1">Reason for Rescheduling</label>
-                      <input
-                        required
-                        type="text"
-                        placeholder="e.g. Doctor emergency / congestion"
-                        value={rescheduleReasons[bk.id] || ''}
-                        onChange={(e) => setRescheduleReasons({ ...rescheduleReasons, [bk.id]: e.target.value })}
-                        className="px-3 py-2 border rounded-xl font-semibold text-xs outline-none bg-gray-50 focus:bg-white focus:border-primary transition-all"
-                      />
-                    </div>
-                    <div className="flex gap-2 justify-end pt-1">
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-[#1B4F72] hover:brightness-110 text-white font-bold rounded-xl uppercase text-[10px] tracking-wider cursor-pointer shadow-xs transition-all outline-none"
-                      >
-                        Send Reschedule Request
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: false })}
-                        className="px-3 py-2 border text-gray-600 hover:bg-gray-50 rounded-xl text-[10px] font-bold outline-none"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                <div className="flex flex-wrap gap-1.5">
-                  {/* Confirms/Verifies booking request */}
-                  {bk.status === 'pending' && (
-                    <button
-                      onClick={() => handleActionWithWA(bk.id, 'confirm', undefined, undefined, undefined, undefined, bk.name)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Confirm Slot
-                    </button>
-                  )}
-
-                  {/* Verify Payment for pending online bookings */}
-                  {bk.bookingType === 'online' && bk.status === 'pending' && bk.paymentStatus === 'pending' && bk.razorpayPaymentLinkId && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          const res = (await onAction(bk.id, 'verify-payment-link')) as any;
-                          if (res && res.paid) {
-                            alert('Payment verified as Paid! Slot has been confirmed and video consultation meeting link generated.');
-                            onRefresh();
-                          } else {
-                            alert(`Payment link is still unpaid (Current status: ${res?.paymentLinkStatus || 'unpaid'}).`);
-                          }
-                        } catch (err: any) {
-                          alert(err.message || 'Verification failed');
-                        }
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-750 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 animate-[spin_4s_linear_infinite]" /> Verify Payment
-                    </button>
-                  )}
-
-                   {/* Arrived Checked In (for offline/physical visits only) */}
-                  {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
-                    <button
-                      onClick={() => {
-                        if (bk.paymentStatus === 'paid') {
-                          handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name);
-                        } else {
-                          setPaymentPromptBooking(bk);
-                        }
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <UserCheck className="w-3.5 h-3.5" /> Check In
-                    </button>
-                  )}
-
-                  {/* Send Meeting Link (WhatsApp) for online bookings */}
-                  {bk.bookingType === 'online' && bk.status === 'confirmed' && bk.paymentStatus === 'paid' && bk.meetingLink && (
-                    <button
-                      onClick={() => {
-                        const msg = `*Skin Hub Clinic — Online Consultation Confirmed* 🏥\n\nHello ${bk.name},\n\nYour payment has been received and your slot on ${bk.date} at ${bk.time} is successfully confirmed.\n\nPlease join your video consultation using the meeting details below:\n\nMeeting Link: ${bk.meetingLink}\nPassword: ${bk.meetingPassword || '—'}\n\nPlease join 5 minutes before your scheduled slot.`;
-                        const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
-                        window.open(waUrl, '_blank');
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <Video className="w-3.5 h-3.5" /> Send Meeting Link (WA)
-                    </button>
-                  )}
-
-                  {/* Complete Consultation (prompts follow-up date option) */}
-                  {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online')) && !showFollowUpInput[bk.id] && (
-                    <button
-                      onClick={() => setShowFollowUpInput({ ...showFollowUpInput, [bk.id]: true })}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <CheckSquare className="w-3.5 h-3.5" /> Complete Session
-                    </button>
-                  )}
-
-                  {/* Reschedule Button */}
-                  {bk.status !== 'cancelled' && bk.status !== 'completed' && !showRescheduleInput[bk.id] && (
-                    <button
-                      onClick={() => setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: true })}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1B4F72] hover:brightness-110 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <Clock className="w-3.5 h-3.5" /> Reschedule
-                    </button>
-                  )}
-
-                  {/* Cancel Booking */}
-                  {bk.status !== 'cancelled' && bk.status !== 'completed' && (
-                    <button
-                      onClick={() => onAction(bk.id, 'cancel')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <XCircle className="w-3.5 h-3.5" /> Cancel
-                    </button>
-                  )}
-
-                  {/* Refund Button */}
-                  {String(bk.paymentStatus).toLowerCase() === 'paid' && bk.status !== 'Cancelled' && bk.status !== 'cancelled' && (
-                    <button
-                      onClick={() => {
-                        if (confirm('Are you sure you want to refund this payment? This will also cancel the booking.')) {
-                          onAction(bk.id, 'refund');
-                        }
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" /> Refund
-                    </button>
-                  )}
-
-                  {/* Invoice Button */}
-                  {bk.payOnline && (
-                    <button
-                      onClick={() => window.open(`/api/appointments/invoice?id=${bk.id}`, '_blank')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-150 hover:bg-gray-200 text-gray-700 border rounded-lg text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer outline-none"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-gray-500" /> Invoice
-                    </button>
-                  )}
-                </div>
-              </div>
-
+                    })}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+          ) : (
+            /* CARDS GRID VIEW */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredBookings
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .map((bk) => (
+                  <div
+                    key={bk.id}
+                    className="p-4 border border-gray-100 rounded-2xl bg-gray-50/50 hover:bg-gray-50 transition-colors flex flex-col justify-between space-y-4 shadow-2xs hover:shadow-xs"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {getStatusBadge(bk.status)}
+                          {getPaymentBadge(bk.paymentStatus)}
+                          {bk.source === 'walk-in' ? (
+                            <span className="px-2 py-0.5 rounded bg-gray-150 border border-gray-300 text-gray-700 text-[10px] font-bold uppercase tracking-wider">🚶 Walk-in</span>
+                          ) : bk.bookingType === 'online' ? (
+                            <span className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold uppercase tracking-wider">🌐 Online Video</span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-250 text-amber-800 text-[10px] font-bold uppercase tracking-wider">🏥 Clinic Visit</span>
+                          )}
+                        </div>
+                        <span className="font-mono text-[9px] font-black text-gray-400 bg-white border px-2 py-0.5 rounded shadow-2xs">
+                          {bk.id}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 text-xs">
+                        <p className="font-bold text-gray-900 text-sm">{bk.name}</p>
+                        <p className="text-gray-600 font-semibold">
+                          {bk.date} at {bk.time} • <span className="text-primary font-bold">{bk.service}</span>
+                        </p>
+                        <p className="text-gray-500 font-semibold flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-gray-400" /> {bk.phone}
+                          {bk.email && ` • ${bk.email}`}
+                        </p>
+                        
+                        {(bk.age || bk.gender || bk.skinType) && (
+                          <p className="text-[10px] text-gray-600 font-semibold bg-white border border-gray-150 p-2 rounded-lg mt-1">
+                            {bk.age && `Age: ${bk.age}`} {bk.gender && ` • Gender: ${bk.gender}`} {bk.skinType && ` • Skin: ${bk.skinType}`}
+                          </p>
+                        )}
+                        {bk.problemDescription && (
+                          <div className="bg-white border border-gray-150 p-2.5 rounded-lg text-[10px] space-y-1 text-gray-700 font-semibold leading-relaxed mt-1">
+                            <p className="text-[9px] uppercase font-black tracking-widest text-primary">Problem Condition:</p>
+                            <p>{bk.problemDescription}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-2 border-t">
+                      {bk.status === 'pending' && (
+                        <button
+                          onClick={() => handleActionWithWA(bk.id, 'confirm', undefined, undefined, undefined, undefined, bk.name)}
+                          className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase"
+                        >
+                          Confirm Slot
+                        </button>
+                      )}
+                      {(bk.status === 'confirmed' || bk.status === 'booked') && bk.bookingType !== 'online' && (
+                        <button
+                          onClick={() => {
+                            if (bk.paymentStatus === 'paid') {
+                              handleActionWithWA(bk.id, 'arrived', undefined, undefined, undefined, undefined, bk.name);
+                            } else {
+                              setPaymentPromptBooking(bk);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-[10px] font-bold uppercase"
+                        >
+                          Check In
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* PAGINATION FOOTER */}
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-gray-200 text-xs text-gray-600">
+            <div className="flex items-center gap-2">
+              <span>Showing <strong>{Math.min((currentPage - 1) * pageSize + 1, filteredBookings.length)}</strong> to <strong>{Math.min(currentPage * pageSize, filteredBookings.length)}</strong> of <strong>{filteredBookings.length}</strong> records</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="ml-2 px-2 py-1 border rounded-lg bg-gray-50 text-xs font-bold focus:outline-none"
+              >
+                <option value={5}>5 per page</option>
+                <option value={10}>10 per page</option>
+                <option value={20}>20 per page</option>
+                <option value={50}>50 per page</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-lg border font-bold text-xs bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Previous
+              </button>
+
+              {Array.from({ length: Math.ceil(filteredBookings.length / pageSize) || 1 }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${
+                    currentPage === page ? 'bg-primary text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, Math.ceil(filteredBookings.length / pageSize)))}
+                disabled={currentPage >= Math.ceil(filteredBookings.length / pageSize)}
+                className="px-3 py-1.5 rounded-lg border font-bold text-xs bg-gray-50 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
     </div>

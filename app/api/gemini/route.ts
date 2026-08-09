@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const ai = getAiClient();
 
     // Define the persona and context for the AI Advisor
-    const systemInstruction = `You are the specialized premium clinical AI skin, hair, and cosmetology assistant chatbot representing "Skin Hub Clinic" in Freeganj, Ujjain. 
+    const systemInstruction = `You are the specialized premium clinical AI skin, hair, and cosmetology assistant chatbot representing "Skin Hub Clinic" in Rishi Nagar, Ujjain. 
 The clinic is led by senior consulting dermatologist "${siteConfig.doctorName}, ${siteConfig.credentials}".
 Outpatient Hours: ${siteConfig.timings}.
 Consultation OPD Fee: ${siteConfig.fee} (payable in cash or online secure UPI).
@@ -81,7 +81,7 @@ Instructions for answers:
       }
     });
 
-    const responseText = response.text || "I was unable to compile a reply. Please try again or visit Dr. Prateek's clinic directly in Freeganj.";
+    const responseText = response.text || "I was unable to compile a reply. Please try again or visit Dr. Prateek's clinic directly in Rishi Nagar.";
     return NextResponse.json({ text: responseText });
 
   } catch (err: any) {
@@ -106,7 +106,7 @@ Instructions for answers:
     }
 
     return NextResponse.json({
-      text: `I encountered a minor connectivity hurdle. For immediate inquiries, please schedule an OPD lookup at our Freeganj office or contact our clinic clerk at +91 98270 42111!\n\n_Dev status: ${err.message || "Unknown cluster error"}_`
+      text: `I encountered a minor connectivity hurdle. For immediate inquiries, please schedule an OPD lookup at our Rishi Nagar office or contact our clinic clerk at +91 98270 42111!\n\n_Dev status: ${err.message || "Unknown cluster error"}_`
     });
   }
 }
@@ -127,14 +127,14 @@ We also conduct microneedling treatments for deeper scars. To proceed safely, we
   
   // Handling Hair queries
   if (query.includes('hair') || query.includes('thinning') || query.includes('fall') || query.includes('prp')) {
-    return `Hello! For hair thinning and follicle concerns: We provide advanced Platelet-Rich Plasma (PRP) Hair Therapy at our Freeganj office. This clinical procedure extracts autologous growth factors from your blood sample using standard centrifugation and micro-delivers them to the scalp. 
+    return `Hello! For hair thinning and follicle concerns: We provide advanced Platelet-Rich Plasma (PRP) Hair Therapy at our Rishi Nagar office. This clinical procedure extracts autologous growth factors from your blood sample using standard centrifugation and micro-delivers them to the scalp. 
 
 This nourishes dormant hair follicles and promotes natural regrowth. Consultation is just Rs. 200. Please register a priority slot on our booking page to meet Dr. Prateek Tiwari!`;
   }
 
   // Handling Timing/Schedule queries
   if (query.includes('time') || query.includes('timing') || query.includes('schedule') || query.includes('sunday')) {
-    return `Certainly! Skin Hub Clinic in Freeganj, Ujjain is active during the following outpatient hours:
+    return `Certainly! Skin Hub Clinic in Rishi Nagar, Ujjain is active during the following outpatient hours:
 - Monday to Saturday: 09:00 AM - 02:00 PM | 05:00 PM - 09:00 PM
 - Sundays: Closed
 
@@ -142,7 +142,7 @@ OPD consultation fee is Rs. 200. We recommend pre-registering your slot through 
   }
 
   // General fallback
-  return `Hello! I am Dr. Prateek Tiwari's AI Assistant. At Skin Hub Clinic in Freeganj, Ujjain, we offer specialized dermatology, cosmetology, and hair transplant consultation schemas. 
+  return `Hello! I am Dr. Prateek Tiwari's AI Assistant. At Skin Hub Clinic in Rishi Nagar, Ujjain, we offer specialized dermatology, cosmetology, and hair transplant consultation schemas. 
 
 To help me answer better, could you please specify if you are querying about active acne, scalp PRP therapies, chemical yellow peels, or timing schedules at our office? You can also schedule an OPD visit for Rs. 200 to meet Dr. Prateek Tiwari physically!`;
 }

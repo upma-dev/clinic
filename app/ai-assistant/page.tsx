@@ -17,7 +17,7 @@ export default function AiAssistantPage() {
             Consult Our AI Skin Doc & Assistant
           </h2>
           <p className="font-sans text-xs sm:text-sm text-gray-800 leading-normal font-semibold">
-            Ask any clinical dermatology questions. Our assistant uses advanced Gemini models customized with localized expertise regarding Dr. Prateek Tiwari&apos;s treatment styles in Freeganj, Ujjain.
+            Ask any clinical dermatology questions. Our assistant uses advanced Gemini models customized with localized expertise regarding Dr. Prateek Tiwari&apos;s treatment styles in Rishi Nagar, Ujjain.
           </p>
         </div>
 

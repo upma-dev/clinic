@@ -4,6 +4,7 @@
  * Orchestrates the business logic when a consultation is completed.
  */
 import { getDb, COLLECTIONS } from '../mongodb';
+import { ObjectId } from 'mongodb';
 import { NotificationService } from './NotificationService';
 import { TelemedicineConsultation } from '../db/telemedicine';
 
@@ -16,9 +17,16 @@ export class ConsultationService {
     const result = await db.collection(COLLECTIONS.telemedicine_consultations).insertOne(doc);
     
     // 2. Update Appointment Status
+    let objId: any = (consultationData as any).appointmentId;
+    try {
+      objId = new ObjectId(objId);
+    } catch {
+      // keep original string
+    }
+
     await db.collection(COLLECTIONS.telemedicine_appointments).updateOne(
-      { _id: (consultationData as any).appointmentId }, // Assuming we convert to ObjectId internally later
-      { $set: { status: 'completed' } }
+      { $or: [{ _id: objId }, { _id: (consultationData as any).appointmentId }] },
+      { $set: { status: 'completed', updatedAt: new Date().toISOString() } }
     );
     
     // 3. Trigger Routine Creation (Future logic inside routine.ts)

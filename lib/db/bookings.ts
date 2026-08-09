@@ -2,24 +2,34 @@ import { getDb, COLLECTIONS } from '../mongodb';
 import type { Booking, BookingStatus, PaymentStatus } from '../types';
 
 export async function getBookingsByDate(date: string): Promise<Booking[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection<Booking>(COLLECTIONS.bookings)
-    .find({ date, status: { $nin: ['cancelled', 'no-show'] } })
-    .sort({ time: 1 })
-    .toArray();
-  return docs.map(({ _id, ...b }) => ({ ...b, _id: _id?.toString() }));
+  try {
+    const db = await getDb();
+    const docs = await db
+      .collection<Booking>(COLLECTIONS.bookings)
+      .find({ date, status: { $nin: ['cancelled', 'no-show'] } })
+      .sort({ time: 1 })
+      .toArray();
+    return docs.map(({ _id, ...b }) => ({ ...b, _id: _id?.toString() }));
+  } catch (e) {
+    console.error('Failed to fetch bookings by date:', e);
+    return [];
+  }
 }
 
 export async function getAllBookings(limit = 100): Promise<Booking[]> {
-  const db = await getDb();
-  const docs = await db
-    .collection<Booking>(COLLECTIONS.bookings)
-    .find({})
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .toArray();
-  return docs.map(({ _id, ...b }) => ({ ...b, _id: _id?.toString() }));
+  try {
+    const db = await getDb();
+    const docs = await db
+      .collection<Booking>(COLLECTIONS.bookings)
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .toArray();
+    return docs.map(({ _id, ...b }) => ({ ...b, _id: _id?.toString() }));
+  } catch (e) {
+    console.error('Failed to fetch all bookings:', e);
+    return [];
+  }
 }
 
 export async function getBookingById(id: string): Promise<Booking | null> {
@@ -31,21 +41,31 @@ export async function getBookingById(id: string): Promise<Booking | null> {
 }
 
 export async function countBookingsForDate(date: string): Promise<number> {
-  const db = await getDb();
-  return db.collection(COLLECTIONS.bookings).countDocuments({
-    date,
-    status: { $nin: ['cancelled', 'no-show'] },
-  });
+  try {
+    const db = await getDb();
+    return await db.collection(COLLECTIONS.bookings).countDocuments({
+      date,
+      status: { $nin: ['cancelled', 'no-show'] },
+    });
+  } catch (e) {
+    console.error('Failed to count bookings for date:', e);
+    return 0;
+  }
 }
 
 export async function isSlotTaken(date: string, time: string): Promise<boolean> {
-  const db = await getDb();
-  const existing = await db.collection(COLLECTIONS.bookings).findOne({
-    date,
-    time,
-    status: { $nin: ['cancelled', 'no-show'] },
-  });
-  return !!existing;
+  try {
+    const db = await getDb();
+    const existing = await db.collection(COLLECTIONS.bookings).findOne({
+      date,
+      time,
+      status: { $nin: ['cancelled', 'no-show'] },
+    });
+    return !!existing;
+  } catch (e) {
+    console.error('Failed to check if slot is taken:', e);
+    return false;
+  }
 }
 
 export async function createBooking(booking: Booking): Promise<Booking> {
@@ -77,12 +97,12 @@ export async function updateBookingPayment(
 ) {
   const db = await getDb();
   await db.collection(COLLECTIONS.bookings).updateOne(
-    { id }, 
-    { 
-      $set: { 
+    { id },
+    {
+      $set: {
         ...paymentUpdate,
-        payOnline: true 
-      } 
+        payOnline: true
+      }
     }
   );
 }

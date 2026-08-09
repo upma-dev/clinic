@@ -48,6 +48,7 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
   const [loading, setLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState('');
   const [error, setError] = useState('');
+  const [queueFilter, setQueueFilter] = useState<'waiting' | 'done' | 'skipped' | 'all'>('waiting');
 
   // ── Walk-in Modal ──
   const [showWalkinModal, setShowWalkinModal] = useState(false);
@@ -868,337 +869,355 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
       )}
 
       {/* ════════════════════════════════════════
-          MAIN LAYOUT
+          FULL WIDTH QUEUE LAYOUT
       ════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+      <div className="w-full space-y-6">
 
-        {/* ──── LEFT COLUMN ──── */}
-        <div className="md:col-span-8 space-y-6">
+        {/* Doctor Controls */}
+        {isDoctor && (
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs space-y-4">
+            <h4 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2 uppercase tracking-wide">
+              <HeartHandshake className="w-4 h-4 text-primary" /> Doctor Control Board
+            </h4>
 
-          {/* Doctor Controls */}
-          {isDoctor && (
-            <div className="bg-white border rounded-2xl p-5 shadow-xs space-y-4">
-              <h4 className="font-bold text-sm text-gray-900 border-b pb-2 flex items-center gap-2 uppercase tracking-wide">
-                <HeartHandshake className="w-4 h-4 text-primary" /> Doctor Control Board
-              </h4>
+            <div className="flex flex-wrap gap-2.5">
+              {/* Call Next = start serving the first waiting patient */}
+              <button
+                onClick={() => waitingBookings[0] && handleStartServing(waitingBookings[0])}
+                disabled={loading || waitingBookings.length === 0}
+                className="flex-1 min-w-[140px] py-3.5 bg-[#1B4F72] hover:brightness-110 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-40"
+              >
+                <SkipForward className="w-4 h-4 text-emerald-300" /> Call Next Patient
+              </button>
 
-              <div className="flex flex-wrap gap-2.5">
-                {/* Call Next = start serving the first waiting patient */}
+              {servingBooking && (
                 <button
-                  onClick={() => waitingBookings[0] && handleStartServing(waitingBookings[0])}
-                  disabled={loading || waitingBookings.length === 0}
-                  className="flex-1 min-w-[120px] py-3 bg-[#1B4F72] hover:brightness-110 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-40"
+                  onClick={() => setFollowUpBookingId(servingBooking.id)}
+                  className="flex-1 min-w-[140px] py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                 >
-                  <SkipForward className="w-4 h-4" /> Call Next
+                  <CheckSquare className="w-4 h-4" /> Complete Consultation
                 </button>
+              )}
 
-                {servingBooking && (
-                  <button
-                    onClick={() => setFollowUpBookingId(servingBooking.id)}
-                    className="flex-1 min-w-[120px] py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <CheckSquare className="w-4 h-4" /> Complete
-                  </button>
-                )}
+              {servingBooking && (
+                <button
+                  onClick={() => handleSendBack(servingBooking)}
+                  className="flex-1 min-w-[140px] py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <RefreshCw className="w-4 h-4" /> Send Back to Queue
+                </button>
+              )}
 
-                {servingBooking && (
-                  <button
-                    onClick={() => handleSendBack(servingBooking)}
-                    className="flex-1 min-w-[120px] py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <RefreshCw className="w-4 h-4" /> Send Back
-                  </button>
-                )}
-
-                {servingBooking && (
-                  <button
-                    onClick={() => handleSkip(servingBooking)}
-                    className="flex-1 min-w-[120px] py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <ChevronLast className="w-4 h-4" /> Skip Patient
-                  </button>
-                )}
-              </div>
-
-              {/* Follow-up date */}
-              {followUpBookingId && (
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
-                  <label className="block text-[10px] font-black text-gray-800 uppercase tracking-widest">Follow-up Date (Optional)</label>
-                  <div className="flex gap-2">
-                    <input type="date" min={new Date().toISOString().split('T')[0]} value={followUpDate}
-                      onChange={e => setFollowUpDate(e.target.value)}
-                      className="flex-1 px-3 py-2 border rounded-lg font-semibold text-xs outline-none bg-white" />
-                    <button onClick={() => handleComplete(followUpBookingId, followUpDate)}
-                      className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg text-[10px] uppercase cursor-pointer">
-                      Complete
-                    </button>
-                    <button onClick={() => setFollowUpBookingId(null)}
-                      className="px-3 py-2 border text-gray-600 rounded-lg text-[10px] font-bold cursor-pointer">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
+              {servingBooking && (
+                <button
+                  onClick={() => handleSkip(servingBooking)}
+                  className="flex-1 min-w-[140px] py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <ChevronLast className="w-4 h-4" /> Skip Patient
+                </button>
               )}
             </div>
-          )}
 
-          {/* ──── LOBBY: WAITING LIST ──── */}
-          <div className="bg-white rounded-2xl border p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h4 className="font-bold text-sm text-gray-900 flex items-center gap-2 uppercase tracking-wide">
-                <Users className="w-4 h-4 text-primary" />
-                Lobby — Waiting Queue
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-black rounded-full">{waitingBookings.length}</span>
-              </h4>
-              <button onClick={onUpdate} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer" title="Refresh">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Currently Serving */}
-            {servingBooking && (
-              <div className="p-3.5 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-black text-sm animate-pulse">
-                    <Stethoscope className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-black text-teal-900">{servingBooking.name}</p>
-                    <p className="text-[10px] text-teal-600 font-semibold">
-                      🩺 {servingBooking.service} • {servingBooking.time}
-                    </p>
-                  </div>
+            {/* Follow-up date */}
+            {followUpBookingId && (
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                <label className="block text-[10px] font-black text-gray-800 uppercase tracking-widest">Follow-up Date (Optional)</label>
+                <div className="flex gap-2">
+                  <input type="date" min={new Date().toISOString().split('T')[0]} value={followUpDate}
+                    onChange={e => setFollowUpDate(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded-lg font-semibold text-xs outline-none bg-white" />
+                  <button onClick={() => handleComplete(followUpBookingId, followUpDate)}
+                    className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg text-[10px] uppercase cursor-pointer">
+                    Complete
+                  </button>
+                  <button onClick={() => setFollowUpBookingId(null)}
+                    className="px-3 py-2 border text-gray-600 rounded-lg text-[10px] font-bold cursor-pointer">
+                    Cancel
+                  </button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 bg-teal-100 border border-teal-300 text-teal-800 text-[9px] font-black uppercase rounded-full animate-pulse">
-                    Now Serving
-                  </span>
-                  {/* Staff can also complete from lobby */}
-                  {!isDoctor && (
-                    <button onClick={() => bookingAction(servingBooking.id, 'complete')}
-                      className="px-2.5 py-1 bg-emerald-600 text-white text-[9px] font-bold rounded-lg cursor-pointer">
-                      ✓ Done
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Waiting list — only WAITING patients, not done/skipped */}
-            {waitingBookings.length === 0 ? (
-              <div className="text-center py-12 space-y-2">
-                <Users className="w-10 h-10 text-gray-200 mx-auto" />
-                <p className="text-xs text-gray-400 font-semibold">No patients in lobby</p>
-                <p className="text-[10px] text-gray-300">Confirmed bookings for today will appear here</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                {waitingBookings.map((b, index) => (
-                  <div key={b.id}
-                    className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-colors ${index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-gray-50/60 border-gray-100 hover:bg-gray-50'
-                      }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${index === 0 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
-                        }`}>
-                        {index + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded capitalize ${b.source === 'online' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
-                            }`}>
-                            {b.source === 'online' ? '🌐 Online' : '🚶 Walk-in'}
-                          </span>
-                          {index === 0 && <span className="text-[9px] font-black text-blue-600 uppercase">↑ Next</span>}
-                        </div>
-                        <p className="font-bold text-gray-900 text-sm mt-0.5 truncate">{b.name}</p>
-                        <p className="text-[10px] text-gray-400 font-semibold">
-                          {b.phone} • Slot: {b.time} • {b.service}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Per-row actions */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isDoctor && (
-                        <button onClick={() => bookingAction(b.id, 'emergency')}
-                          className="p-1.5 hover:bg-rose-50 text-rose-400 hover:text-rose-600 border border-transparent hover:border-rose-200 rounded-lg cursor-pointer outline-none" title="Emergency">
-                          <Star className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      {/* Staff: mark as serving */}
-                      {!isDoctor && (
-                        <button onClick={() => handleStartServing(b)}
-                          className="p-1.5 hover:bg-teal-50 text-teal-500 hover:text-teal-700 rounded-lg cursor-pointer outline-none" title="Start Serving">
-                          <Play className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      <button onClick={() => handleSkip(b)}
-                        className="p-1.5 hover:bg-amber-50 text-amber-400 hover:text-amber-600 rounded-lg cursor-pointer outline-none" title="Skip">
-                        <ChevronLast className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => bookingAction(b.id, 'cancel')}
-                        className="p-1.5 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg cursor-pointer outline-none" title="Cancel">
-                        <UserMinus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
             )}
           </div>
+        )}
 
-          {/* ──── DONE + SKIPPED sections ──── */}
-          {(doneBookings.length > 0 || skippedBookings.length > 0) && (
-            <div className="grid grid-cols-2 gap-4">
-              {doneBookings.length > 0 && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 border-b border-emerald-100 pb-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <h5 className="text-xs font-black text-emerald-800 uppercase tracking-wide">Done ({doneBookings.length})</h5>
-                  </div>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                    {doneBookings.map(b => (
-                      <div key={b.id} className="flex flex-col gap-1 text-[11px] bg-white border border-emerald-100 p-2.5 rounded-xl">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-900 truncate max-w-[120px]">{b.name}</span>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        </div>
-                        <p className="text-[10px] text-gray-500 font-semibold">{b.phone}</p>
-                        <div className="flex items-center justify-between mt-1 text-[9px] font-black uppercase text-teal-650">
-                          <span>⏱ {b.time}</span>
-                          <span className="truncate max-w-[120px] text-right">🩺 {b.service}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {skippedBookings.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 border-b border-amber-100 pb-2">
-                    <UserX className="w-4 h-4 text-amber-600" />
-                    <h5 className="text-xs font-black text-amber-800 uppercase tracking-wide">Skipped ({skippedBookings.length})</h5>
-                  </div>
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                    {skippedBookings.map(b => (
-                      <div key={b.id} className="flex flex-col gap-1 text-[11px] bg-white border border-amber-100 p-2.5 rounded-xl">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-900 truncate max-w-[120px]">{b.name}</span>
-                          <span className="text-amber-550 font-black text-[9px] uppercase shrink-0">No-Show</span>
-                        </div>
-                        <p className="text-[10px] text-gray-500 font-semibold">{b.phone}</p>
-                        <div className="flex items-center justify-between mt-1 text-[9px] font-black uppercase text-amber-650">
-                          <span>⏱ {b.time}</span>
-                          <span className="truncate max-w-[120px] text-right">🩺 {b.service}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ──── RIGHT COLUMN ──── */}
-        <div className="md:col-span-4 space-y-5">
-
-          {/* Walk-in Register Button */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs space-y-3">
-            <div className="flex items-center gap-2.5 border-b pb-3">
-              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-                <UserPlus className="w-4 h-4 text-primary" />
+        {/* ──── LOBBY: FULL WIDTH QUEUE MANAGEMENT BOARD ──── */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-5">
+          
+          {/* Main Board Header with Integrated Actions */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between border-b pb-4 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center font-bold">
+                <Users className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h4 className="font-playfair font-bold text-sm text-gray-900">Walk-in Registry</h4>
-                <p className="text-[10px] text-gray-500 font-semibold">Full intake form + instant token</p>
+                <h4 className="font-playfair font-bold text-base text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  Queue Management Board
+                </h4>
+                <p className="text-[10px] text-gray-500 font-semibold">Live patient queue, OPD arrival search & walk-in tokens</p>
               </div>
             </div>
-            <button onClick={() => setShowWalkinModal(true)}
-              className="w-full py-3.5 bg-gradient-to-r from-[#0B1B29] to-[#1B4F72] hover:brightness-110 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer outline-none">
-              <UserPlus className="w-4 h-4 text-emerald-300" />
-              Register Walk-in Patient
+
+            {/* Actions Bar: Search + Register Walk-in + Refresh */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* OPD Arrival Search */}
+              <div className="relative flex items-center">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search patient or phone..."
+                  value={searchQuery}
+                  onChange={e => {
+                    setSearchQuery(e.target.value);
+                    if (e.target.value.trim()) {
+                      searchBookings();
+                    } else {
+                      setSearchResults([]);
+                    }
+                  }}
+                  className="pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold bg-gray-50/50 focus:bg-white focus:border-primary outline-none w-48 sm:w-64 transition-all"
+                />
+              </div>
+
+              {/* Register Walk-in Button */}
+              <button
+                onClick={() => setShowWalkinModal(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-[#0B1B29] to-[#1B4F72] hover:brightness-110 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-sm transition-all flex items-center gap-1.5 cursor-pointer outline-none shrink-0"
+              >
+                <UserPlus className="w-4 h-4 text-emerald-300" />
+                Register Walk-in
+              </button>
+
+              <button onClick={onUpdate} className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-600 transition-colors cursor-pointer" title="Refresh Queue">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-Header Filter Bar */}
+          <div className="flex gap-2 overflow-x-auto pb-1 items-center">
+            <button
+              type="button"
+              onClick={() => setQueueFilter('waiting')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                queueFilter === 'waiting'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              ⏳ Waiting Queue
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                queueFilter === 'waiting' ? 'bg-white text-blue-800' : 'bg-blue-100 text-blue-800'
+              }`}>
+                {waitingBookings.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setQueueFilter('done')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                queueFilter === 'done'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              ✅ Done
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                queueFilter === 'done' ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                {doneBookings.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setQueueFilter('skipped')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                queueFilter === 'skipped'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              🚷 Skipped
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                queueFilter === 'skipped' ? 'bg-white text-amber-800' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {skippedBookings.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setQueueFilter('all')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                queueFilter === 'all'
+                  ? 'bg-gray-800 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📋 All ({totalToday})
             </button>
           </div>
 
-          {/* OPD Arrival Check-in (Staff only) */}
-          {!isDoctor && (
-            <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4">
-              <div className="flex items-center gap-2.5 border-b pb-3">
-                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                  <Search className="w-4 h-4" />
+          {/* Currently Serving Banner */}
+          {servingBooking && (
+            <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-black text-sm animate-pulse">
+                  <Stethoscope className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h4 className="font-playfair font-bold text-sm text-gray-900">OPD Arrival Check-in</h4>
-                  <p className="text-[10px] text-gray-500 font-semibold">Mark pre-booked patient as arrived</p>
+                  <p className="text-xs font-black text-teal-900">{servingBooking.name}</p>
+                  <p className="text-[10px] text-teal-600 font-semibold">
+                    🩺 {servingBooking.service} • {servingBooking.time}
+                  </p>
                 </div>
               </div>
-              <div className="space-y-3 text-xs">
-                <div className="flex gap-2">
-                  <input type="text" placeholder="Name, phone or booking ID..."
-                    value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && searchBookings()}
-                    className="flex-1 px-3 py-2 border rounded-xl font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-400 transition-all" />
-                  <button onClick={searchBookings} disabled={searching}
-                    className="px-3.5 py-2 bg-[#1B4F72] text-white font-bold rounded-xl cursor-pointer text-[10px] uppercase tracking-wider outline-none disabled:opacity-50">
-                    {searching ? '...' : 'Find'}
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-teal-100 border border-teal-300 text-teal-800 text-[9px] font-black uppercase rounded-full animate-pulse">
+                  Now Serving
+                </span>
+                {!isDoctor && (
+                  <button onClick={() => bookingAction(servingBooking.id, 'complete')}
+                    className="px-3 py-1 bg-emerald-600 text-white text-[9px] font-bold rounded-lg cursor-pointer">
+                    ✓ Done
                   </button>
-                </div>
-                {searchResults.length > 0 && (
-                  <div className="space-y-2 max-h-48 overflow-y-auto border-t border-gray-100 pt-2">
-                    {searchResults.map(b => (
-                      <div key={b.id} className="p-2.5 border rounded-xl bg-gray-50/80 flex items-center justify-between text-[11px]">
-                        <div>
-                          <p className="font-bold text-gray-900">{b.name}</p>
-                          <p className="text-[9px] text-gray-500">{b.time} • {b.id}</p>
-                        </div>
-                        <button onClick={() => handleCheckIn(b)}
-                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-[9px] uppercase cursor-pointer">
-                          Check In
-                        </button>
-                      </div>
-                    ))}
-                  </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Today's bookings summary */}
-          <div className="bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-3">
-            <div className="flex items-center gap-2.5 border-b pb-3">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <CalendarDays className="w-4 h-4" />
+          {/* Search Dropdown Results if searching */}
+          {searchResults.length > 0 && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-2">
+              <p className="text-[10px] font-bold text-purple-900 uppercase">Search Results ({searchResults.length})</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {searchResults.map(b => (
+                  <div key={b.id} className="p-2.5 border rounded-xl bg-white flex items-center justify-between text-xs">
+                    <div>
+                      <p className="font-bold text-gray-900">{b.name}</p>
+                      <p className="text-[10px] text-gray-500">{b.time} • {b.phone}</p>
+                    </div>
+                    <button onClick={() => handleCheckIn(b)}
+                      className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-[10px] uppercase cursor-pointer">
+                      Check In
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div>
-                <h4 className="font-playfair font-bold text-sm text-gray-900">Today's Bookings</h4>
-                <p className="text-[10px] text-gray-500 font-semibold">All scheduled for today</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-center">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl py-2">
-                <p className="text-xs font-black text-blue-800">{todayBookings.filter(b => b.source === 'online').length}</p>
-                <p className="text-[9px] font-bold text-blue-600 uppercase">Online</p>
-              </div>
-              <div className="bg-gray-50 border border-gray-100 rounded-xl py-2">
-                <p className="text-xs font-black text-gray-800">{todayBookings.filter(b => b.source === 'walk-in').length}</p>
-                <p className="text-[9px] font-bold text-gray-500 uppercase">Walk-in</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Staff restricted notice */}
-          {!isDoctor && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
-              <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <p className="text-[10px] font-bold text-rose-900 uppercase tracking-wider leading-relaxed">
-                Settings & CMS are restricted to Doctor credentials only.
-              </p>
             </div>
           )}
 
+          {/* Filtered Patient List */}
+          {(() => {
+            const displayList =
+              queueFilter === 'done' ? doneBookings :
+              queueFilter === 'skipped' ? skippedBookings :
+              queueFilter === 'all' ? sortBookings(todayBookings) :
+              waitingBookings;
+
+            if (displayList.length === 0) {
+              return (
+                <div className="text-center py-16 space-y-2 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                  <Users className="w-10 h-10 text-gray-300 mx-auto" />
+                  <p className="text-xs text-gray-500 font-bold">No {queueFilter} patients found</p>
+                  <p className="text-[10px] text-gray-400">Select a different filter tab above.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
+                {displayList.map((b, index) => {
+                  const isDone = DONE_STATUSES.includes(b.status as string);
+                  const isSkipped = SKIPPED_STATUSES.includes(b.status as string);
+
+                  return (
+                    <div key={b.id}
+                      className={`p-4 rounded-xl border flex items-center justify-between gap-4 transition-colors ${
+                        isDone ? 'bg-emerald-50/60 border-emerald-200' :
+                        isSkipped ? 'bg-amber-50/60 border-amber-200' :
+                        index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-gray-50/60 border-gray-100 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                          isDone ? 'bg-emerald-600 text-white' :
+                          isSkipped ? 'bg-amber-500 text-white' :
+                          index === 0 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded capitalize ${b.source === 'online' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                              {b.source === 'online' ? '🌐 Online' : '🚶 Walk-in'}
+                            </span>
+                            
+                            {isDone && (
+                              <span className="text-[9px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded uppercase">
+                                ✓ Completed
+                              </span>
+                            )}
+                            {isSkipped && (
+                              <span className="text-[9px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded uppercase">
+                                No-Show
+                              </span>
+                            )}
+                            {!isDone && !isSkipped && index === 0 && (
+                              <span className="text-[9px] font-black text-blue-600 uppercase">↑ Next</span>
+                            )}
+                          </div>
+                          <p className="font-bold text-gray-900 text-sm mt-0.5 truncate">{b.name}</p>
+                          <p className="text-[10px] text-gray-500 font-semibold">
+                            {b.phone} • Slot: {b.time} • {b.service}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Per-row actions */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isSkipped && (
+                          <button
+                            onClick={() => bookingAction(b.id, 'mark-waiting')}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold uppercase cursor-pointer"
+                            title="Re-add to Lobby Queue"
+                          >
+                            Re-add
+                          </button>
+                        )}
+
+                        {!isDone && !isSkipped && isDoctor && (
+                          <button onClick={() => bookingAction(b.id, 'emergency')}
+                            className="p-2 hover:bg-rose-50 text-rose-400 hover:text-rose-600 border border-transparent hover:border-rose-200 rounded-lg cursor-pointer outline-none" title="Emergency">
+                            <Star className="w-4 h-4" />
+                          </button>
+                        )}
+                        {!isDone && !isSkipped && !isDoctor && (
+                          <button onClick={() => handleStartServing(b)}
+                            className="p-2 hover:bg-teal-50 text-teal-500 hover:text-teal-700 rounded-lg cursor-pointer outline-none" title="Start Serving">
+                            <Play className="w-4 h-4" />
+                          </button>
+                        )}
+                        {!isDone && !isSkipped && (
+                          <button onClick={() => handleSkip(b)}
+                            className="p-2 hover:bg-amber-50 text-amber-400 hover:text-amber-600 rounded-lg cursor-pointer outline-none" title="Skip">
+                            <ChevronLast className="w-4 h-4" />
+                          </button>
+                        )}
+                        {!isDone && (
+                          <button onClick={() => bookingAction(b.id, 'cancel')}
+                            className="p-2 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg cursor-pointer outline-none" title="Cancel">
+                            <UserMinus className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

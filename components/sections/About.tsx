@@ -19,9 +19,9 @@ interface AboutProps {
 }
 
 const defaultStats = [
-  { icon: <Clock className="w-5 h-5" />,   value: '12+',  label: 'Years Experience' },
-  { icon: <Users className="w-5 h-5" />,   value: '5,000+', label: 'Patients Treated' },
-  { icon: <Award className="w-5 h-5" />,   value: '4.9★',  label: 'Google Rating' },
+  { icon: <Clock className="w-5 h-5" />, value: '12+', label: 'Years Experience' },
+  { icon: <Users className="w-5 h-5" />, value: '5,000+', label: 'Patients Treated' },
+  { icon: <Award className="w-5 h-5" />, value: '4.9★', label: 'Google Rating' },
   { icon: <ShieldCheck className="w-5 h-5" />, value: '15+', label: 'Treatments' },
 ];
 
@@ -37,8 +37,8 @@ export default function About({ cms }: AboutProps) {
   const doctorName = cms?.aboutTitle || siteConfig.doctorName;
   const credentialsText = cms?.aboutSubtitle || siteConfig.credentials;
   const aboutDescription = cms?.aboutDescription || "With over 12 years of dedicated practice in dermatology and cosmetology, Dr. Prateek Tiwari has helped thousands of patients across Ujjain and Madhya Pradesh achieve healthier skin and restored confidence. His patient-first philosophy combines evidence-based medicine with modern aesthetic science.";
-  const doctorImage = cms?.aboutDoctorImage || "/assets/doctor.png";
-  
+  const doctorImage = cms?.aboutDoctorImage || "/assets/doctor.jpeg";
+
   const statsList = cms?.aboutStats?.map((s, idx) => ({
     icon: idx === 0 ? <Clock className="w-5 h-5" /> : idx === 1 ? <Users className="w-5 h-5" /> : idx === 2 ? <Award className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />,
     value: s.value,
@@ -61,14 +61,15 @@ export default function About({ cms }: AboutProps) {
             style={{ transformStyle: 'preserve-3d', perspective: '1000px' }}
             className="relative flex justify-center"
           >
-            <div className="relative w-full max-w-[400px] aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-gray-100">
+            <div className="relative w-full max-w-[400px] aspect-[4/5] rounded-[36px] overflow-hidden shadow-[0_20px_50px_rgba(20,184,166,0.18)] border-[6px] border-white bg-slate-100 group">
               <Image
                 src={doctorImage}
                 alt={`${doctorName} — Best Dermatologist in Ujjain`}
                 fill
-                className="object-cover"
+                className="object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.03]"
                 sizes="(max-width: 1024px) 100vw, 400px"
               />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 pointer-events-none" />
             </div>
             {/* Floating credential card */}
             <div className="absolute -bottom-6 -right-4 sm:right-4 bg-white border border-gray-200 shadow-xl rounded-2xl p-4 max-w-[200px] z-10">

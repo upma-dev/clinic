@@ -54,7 +54,7 @@ export default function Services({ cms }: ServicesProps) {
           </h2>
           <p className="font-sans text-gray-500 mt-3 text-sm sm:text-base max-w-xl mx-auto leading-relaxed font-semibold">
             Certified skin and hair procedures aligned with modern dermatology standards. 
-            Available at <strong>Skin Hub, Freeganj, Ujjain</strong>.
+            Available at <strong>Skin Hub, Rishi Nagar, Ujjain</strong>.
           </p>
         </div>
 

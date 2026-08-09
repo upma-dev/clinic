@@ -8,7 +8,7 @@ export default function LocalBusinessSchema() {
         "@type": ["MedicalBusiness", "LocalBusiness"],
         "@id": "https://skinhubujjain.com/#clinic",
         "name": `${siteConfig.clinicName} - Dr. Prateek Tiwari Dermatology Clinic`,
-        "description": "Skin Hub is Ujjain's leading dermatology clinic led by Dr. Prateek Tiwari (MBBS, DVD). Specialising in acne treatment, PRP hair therapy, skin brightening, and anti-ageing procedures in Freeganj, Ujjain, Madhya Pradesh.",
+        "description": "Dr. Prateek Tiwari's Skin Hub Derma, Hair & Laser Clinic is Ujjain's leading dermatology and hair restoration center led by Dr. Prateek Tiwari (MBBS, DVD) in Rishi Nagar, Ujjain, Madhya Pradesh.",
         "url": "https://skinhubujjain.com",
         "telephone": "+91-9827042111",
         "email": "contact@skinhubujjain.com",
@@ -17,7 +17,7 @@ export default function LocalBusinessSchema() {
         "medicalSpecialty": "Dermatology",
         "address": {
           "@type": "PostalAddress",
-          "streetAddress": "1st Floor, Royal Arcade, Above UCO Bank, Freeganj",
+          "streetAddress": "Skin Hub & Physio Centre, Rishi Nagar",
           "addressLocality": "Ujjain",
           "addressRegion": "Madhya Pradesh",
           "postalCode": "456010",
@@ -44,8 +44,8 @@ export default function LocalBusinessSchema() {
         ],
         "aggregateRating": {
           "@type": "AggregateRating",
-          "ratingValue": "4.9",
-          "reviewCount": "500",
+          "ratingValue": "4.8",
+          "reviewCount": "694",
           "bestRating": "5"
         }
       },

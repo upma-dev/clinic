@@ -44,24 +44,28 @@ export default function ConsultationForm({ appointment, onComplete }: Props) {
         patientId: appointment.patientId || 'unknown'
       };
 
-      const pdfBase64 = await PDFService.generatePrescriptionPDF(appointment, consultationData as any);
+      const pdfHtml = PDFService.generatePrescriptionHTML(appointment, consultationData as any);
 
-      // 2. Upload PDF to Cloudinary
-      const pdfUrl = await CloudinaryService.uploadFile(pdfBase64, 'telemedicine/prescriptions');
-
-      // 3. Save Consultation to DB
+      // 2. Save Consultation to DB
       const res = await fetch('/api/telemedicine/consultation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...consultationData,
-          generatedPdfUrl: pdfUrl,
+          generatedPdfUrl: pdfHtml,
           patientEmail: appointment.email,
           patientName: appointment.name
         })
       });
 
       if (!res.ok) throw new Error('Failed to save consultation');
+
+      // 3. Open Prescription PDF via safe Blob URL
+      try {
+        PDFService.openPrescription(appointment, consultationData as any);
+      } catch (e) {
+        console.error(e);
+      }
 
       onComplete();
     } catch (err) {
@@ -72,9 +76,31 @@ export default function ConsultationForm({ appointment, onComplete }: Props) {
     }
   };
 
+  const autoFillSample = () => {
+    setFormData({
+      diagnosis: 'Acne Vulgaris (Grade III - Severe Cystic Acne) with Post-Inflammatory Hyperpigmentation',
+      prescriptionText: '1. Tab Doxycycline 100mg - 1 tablet daily after lunch for 14 days\n2. Adapalene 0.1% Gel - Apply thin layer at night\n3. Gentle Foaming Cleanser - Use twice daily\n4. Broad Spectrum Gel Sunscreen SPF 50 - Apply every 3 hours outdoors',
+      lifestyleAdvice: 'Avoid picking or squeezing acne lesions. Change pillowcases every 2 days.',
+      dietSuggestions: 'Reduce high glycemic index foods and dairy. Drink 3 liters of water daily.',
+      labTests: 'Serum Free Testosterone, Fasting Blood Sugar, Thyroid Profile (TSH)',
+      followUpDate: '2026-08-16',
+      doctorInternalNotes: 'Patient has PCOS background. Review acne response after 2 weeks of Doxycycline.',
+      patientInstructions: 'Follow morning and night skincare routine consistently.',
+    });
+  };
+
   return (
     <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-      <h3 className="font-playfair text-xl font-bold text-gray-900 mb-4 border-b pb-3">Complete Consultation</h3>
+      <div className="flex justify-between items-center mb-4 border-b pb-3">
+        <h3 className="font-playfair text-xl font-bold text-gray-900">Complete Consultation</h3>
+        <button
+          type="button"
+          onClick={autoFillSample}
+          className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold rounded-lg transition border border-emerald-200"
+        >
+          ⚡ Auto-Fill Sample Prescription
+        </button>
+      </div>
       
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { Inter, Playfair_Display } from 'next/font/google';
 import FloatingSidebar from '@/components/ui/FloatingSidebar';
+import { GlobalNavigationLoaderProvider } from '@/components/providers/GlobalNavigationLoader';
 import './globals.css';
 
 const inter = Inter({
@@ -32,8 +33,12 @@ export default function RootLayout({
         <link rel="icon" href="/assets/logo.png" />
       </head>
       <body className="antialiased selection:bg-accent/30 selection:text-text bg-surface text-text">
-        <FloatingSidebar />
-        {children}
+        <Suspense fallback={null}>
+          <GlobalNavigationLoaderProvider>
+            <FloatingSidebar />
+            {children}
+          </GlobalNavigationLoaderProvider>
+        </Suspense>
       </body>
     </html>
   );

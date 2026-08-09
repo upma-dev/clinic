@@ -104,7 +104,7 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
             </span>
             <span className="px-3 border-l border-teal-800 flex items-center">
               <Pin className="w-3 h-3 mr-2" />
-              Freeganj Clinic: {timingsText}
+              Rishi Nagar Clinic: {timingsText}
             </span>
           </div>
           <div className="flex items-center space-x-6 text-gray-300">
@@ -135,11 +135,11 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
                 <img src={logoUrl} alt="Skin Hub Logo" className="w-10 h-10 object-contain p-0.5" />
               </div>
               <div className="flex flex-col text-left">
-                <span className="font-headline font-black text-lg sm:text-2xl text-primary tracking-tight leading-tight select-none">
-                  {clinicName}
+                <span className="font-headline font-black text-xl sm:text-2xl text-primary tracking-tight leading-tight select-none">
+                  Skin Hub Clinic
                 </span>
                 <span className="font-sans text-[10px] tracking-widest text-accent uppercase font-bold select-none">
-                  Skin & Cosmetology
+                  Derma, Hair & Laser • Dr. Prateek Tiwari
                 </span>
               </div>
             </Link>

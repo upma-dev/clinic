@@ -22,7 +22,9 @@ export default function Contact({ settings, cms }: ContactProps) {
   const whatsapp = settings?.clinicPhone?.replace(/[^0-9]/g, '') || siteConfig.whatsapp;
   const email = settings?.clinicEmail || cms?.contactEmail || siteConfig.email;
   const timings = settings ? `${settings.morningStart} AM - ${settings.morningEnd} PM | ${settings.eveningStart} PM - ${settings.eveningEnd} PM (Sunday Closed)` : siteConfig.timings;
-  const googleMapsEmbed = cms?.googleMapsEmbed || "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d115160.85295147804!2d75.76011409726563!3d23.18042450000001!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3963f1ec3db2cd4d%3A0xe5a3c261b8f5df84!2sSkin%20Hub%20Dermatology%20Clinic!5e0!3m2!1sen!2sin!4v1700000000000!5m2!1sen!2sin";
+  const googleMapsEmbed = (cms?.googleMapsEmbed && !cms.googleMapsEmbed.includes('embed?pb='))
+    ? cms.googleMapsEmbed
+    : "https://www.google.com/maps?q=Rishi+Nagar+Ujjain+Madhya+Pradesh&output=embed";
 
   return (
     <section id="contact" className="py-20 bg-[#F9F9FB]">

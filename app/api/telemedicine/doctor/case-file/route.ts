@@ -9,12 +9,14 @@ export async function GET(req: Request) {
 
     const db = await getDb();
 
-    // 1. Get the current questionnaire
+    // 1. Get the current questionnaire & consultation
     const currentQuestionnaire = await db.collection(COLLECTIONS.telemedicine_questionnaires)
       .findOne({ appointmentId });
 
+    const currentConsultation = await db.collection(COLLECTIONS.telemedicine_consultations)
+      .findOne({ appointmentId });
+
     // 2. Get past consultations for this patient
-    // If the patient has a phone number, find all appointments with this phone, then their consultations.
     let pastHistory: any[] = [];
     if (patientPhone) {
       const pastAppointments = await db.collection(COLLECTIONS.telemedicine_appointments)
@@ -43,6 +45,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       currentQuestionnaire,
+      currentConsultation,
       pastHistory
     });
 

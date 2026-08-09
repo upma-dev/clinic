@@ -59,7 +59,7 @@ export default function AppointmentBookingView() {
         setWaitlist(data.queuePreview || []);
       }
     } catch (err) {
-      console.error(err);
+      console.warn('Queue data fetch warning:', err);
     } finally {
       setLoadingQueue(false);
     }
@@ -76,27 +76,31 @@ export default function AppointmentBookingView() {
         setSlots(data.slots || []);
       }
     } catch (err) {
-      console.error(err);
+      console.warn('Slots data fetch warning:', err);
     } finally {
       setLoadingSlots(false);
     }
   };
 
-  // Initial load & Polling
+  // Initial load & Polling for live queue
   useEffect(() => {
     setMounted(true);
     fetchQueueData();
-    const timer = setInterval(() => {
+    const queueTimer = setInterval(() => {
       fetchQueueData();
-      if (date) fetchSlots(date);
-    }, 15000); // 15s aggressive polling for live waitlist
-    return () => clearInterval(timer);
-  }, [date]);
+    }, 15000); // 15s polling for live waitlist
+    return () => clearInterval(queueTimer);
+  }, []);
 
-  // When date changes, fetch slots immediately
+  // When date changes, fetch slots immediately and poll for changes
   useEffect(() => {
+    if (!date) return;
     fetchSlots(date);
     setTime(''); // Reset selected time
+    const slotTimer = setInterval(() => {
+      fetchSlots(date);
+    }, 20000);
+    return () => clearInterval(slotTimer);
   }, [date]);
 
   const loadRazorpay = () => {

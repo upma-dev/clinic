@@ -16,7 +16,8 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Image from 'next/image';
-import { ChevronLeft, ChevronRight, Sparkles, MoveHorizontal, Shield } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronLeft, ChevronRight, Sparkles, MoveHorizontal, Shield, ArrowRight } from 'lucide-react';
 
 interface BeforeAfterCase {
   id: number;
@@ -284,6 +285,16 @@ export default function BeforeAfter() {
             Drag the slider on each photo to see real before & after results from our patients at{' '}
             <strong>Skin Hub, Ujjain</strong>.
           </p>
+
+          <div className="mt-6">
+            <Link
+              href="/gallery"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-bold text-xs sm:text-sm hover:bg-accent hover:text-gray-900 transition-all duration-300 shadow-md hover:shadow-lg"
+            >
+              View all gallery
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
 
         {/* Tab pills — desktop treatment filter */}
