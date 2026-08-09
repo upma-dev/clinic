@@ -114,21 +114,19 @@ export default function AppointmentBookingView() {
           </div>
         </div>
 
-        {/* Integrated Waitlist */}
-        <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3.5 border border-white/50 shadow-2xs">
-          <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-black/10">
-            <div className="flex items-center gap-2">
-              <List className="w-4 h-4 opacity-70" />
-              <h3 className="font-playfair text-sm font-bold text-gray-900">Current Waitlist</h3>
+        {/* Integrated Waitlist (Only rendered when patients are waiting) */}
+        {waitlist.length > 0 && (
+          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3.5 border border-white/50 shadow-2xs">
+            <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-black/10">
+              <div className="flex items-center gap-2">
+                <List className="w-4 h-4 opacity-70" />
+                <h3 className="font-playfair text-sm font-bold text-gray-900">Current Waitlist ({waitlist.length})</h3>
+              </div>
+              <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider font-mono">Live Queue</span>
             </div>
-            <span className="text-[10px] font-bold opacity-60 uppercase tracking-wider font-mono">Live Queue</span>
-          </div>
 
-          <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
-            {waitlist.length === 0 ? (
-              <p className="text-center py-3 text-xs font-semibold opacity-60">No patients waiting right now.</p>
-            ) : (
-              waitlist.map((item) => (
+            <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+              {waitlist.map((item) => (
                 <div key={item.token} className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 border border-white/60 text-xs">
                   <div className="flex items-center gap-2.5">
                     <span className="font-black text-sm opacity-50">#{item.position}</span>
@@ -143,10 +141,10 @@ export default function AppointmentBookingView() {
                     {item.status}
                   </span>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         
         <p className="text-[11px] font-semibold opacity-60 pt-1 flex items-center justify-center">
           <Clock className="w-3 h-3 mr-1" />
