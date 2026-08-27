@@ -8,6 +8,7 @@ import { siteConfig } from '@/config/site';
 import { motion, useScroll, useTransform, useReducedMotion, useMotionValue, useSpring } from 'motion/react';
 import Script from 'next/script';
 import type { ClinicSettings, CMSContent } from '@/lib/types';
+import { formatHHMM, getAreaFromAddress } from '@/lib/slots';
 
 interface HeroProps {
   settings?: ClinicSettings | null;
@@ -22,7 +23,11 @@ export default function Hero({ settings, cms }: HeroProps) {
   const doctorName = cms?.aboutTitle || siteConfig.doctorName;
   const credentials = cms?.aboutSubtitle || siteConfig.credentials;
   const phone = settings?.clinicPhone || siteConfig.phone;
-  const timings = settings ? `${settings.morningStart} AM - ${settings.morningEnd} PM | ${settings.eveningStart} PM - ${settings.eveningEnd} PM` : siteConfig.timings;
+  const timings = settings 
+    ? `${formatHHMM(settings.morningStart)} - ${formatHHMM(settings.morningEnd)} | ${formatHHMM(settings.eveningStart)} - ${formatHHMM(settings.eveningEnd)}` 
+    : siteConfig.timings;
+  const location = settings?.clinicAddress || cms?.contactAddress || siteConfig.location;
+  const areaName = getAreaFromAddress(location);
 
   const heroTitleLine1 = cms?.heroTitleLine1 || "Advanced Skin, Hair";
   const heroTitleLine2 = cms?.heroTitleLine2 || "Laser Care in Ujjain";
@@ -86,7 +91,7 @@ export default function Hero({ settings, cms }: HeroProps) {
       id="home"
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      className="relative pt-20 sm:pt-32 pb-12 sm:pb-20 bg-[#F9FBFC] overflow-hidden lg:min-h-[90vh] lg:flex lg:items-center"
+      className="relative pt-24 sm:pt-28 pb-8 sm:pb-12 bg-[#F9FBFC] overflow-hidden lg:min-h-[80vh] lg:flex lg:items-center"
     >
       <Script
         id="medical-clinic-schema"
@@ -204,17 +209,17 @@ export default function Hero({ settings, cms }: HeroProps) {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.1, delay: shouldReduceMotion ? 0 : 0.6, ease: customEase }}
-              className="bg-white p-6 border border-gray-150 rounded-2xl shadow-sm max-w-lg flex items-start space-x-4"
+              className="bg-white p-4 border border-gray-150 rounded-2xl shadow-sm max-w-md flex items-start space-x-4"
             >
               <div className="bg-primary/10 p-3 rounded-full shrink-0">
                 <MapPin className="w-6 h-6 text-primary" />
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] uppercase font-black tracking-widest text-primary block">
-                  Clinical Center: Rishi Nagar, Ujjain
+                  Clinical Center: {areaName}, Ujjain
                 </span>
                 <span className="font-sans text-sm font-bold text-gray-900 block">
-                  {clinicName} — Clinical & Aesthetic Solutions
+                  {location}
                 </span>
                 <span className="font-sans text-[12px] text-gray-600 block">
                   {timings}
@@ -227,7 +232,7 @@ export default function Hero({ settings, cms }: HeroProps) {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.1, delay: shouldReduceMotion ? 0 : 0.7, ease: customEase }}
-              className="mt-10 flex flex-wrap gap-4"
+              className="mt-6 flex flex-wrap gap-4"
             >
               <Link
                 href="/booking"
@@ -270,7 +275,10 @@ export default function Hero({ settings, cms }: HeroProps) {
                   src={heroImageUrl}
                   alt={`${doctorName} - Best Dermatologist in Ujjain`}
                   fill
-                  className="object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+                  className="object-cover object-center transition-all duration-700 ease-out group-hover:[--scale:1.32]"
+                  style={{
+                    transform: 'scale(var(--scale, 1.28)) translate(-10%, 4%)',
+                  } as React.CSSProperties}
                   priority
                   sizes="(max-width: 768px) 100vw, 360px"
                 />

@@ -5,6 +5,7 @@ import {
   markAsRead,
   markAllAsRead,
   clearAllNotifications,
+  createNotification,
 } from '@/lib/db/notifications';
 
 export async function GET() {
@@ -30,7 +31,15 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { action, id } = body;
+    const { action, id, type, title, message } = body;
+
+    if (action === 'create') {
+      if (!title || !message) {
+        return NextResponse.json({ error: 'Title and message required' }, { status: 400 });
+      }
+      const notif = await createNotification(type || 'system', title, message);
+      return NextResponse.json(notif);
+    }
 
     if (action === 'mark_read') {
       if (!id) {

@@ -1,13 +1,9 @@
-/**
- * @file app/page.tsx
- * Optimized Server Component with direct static imports for instant route switching
- */
+export const dynamic = 'force-dynamic';
 
 import React from 'react';
 import Navbar from '@/components/sections/Navbar';
 import Hero from '@/components/sections/Hero';
 import Services from '@/components/sections/Services';
-import BookingForm from '@/components/sections/BookingForm';
 import About from '@/components/sections/About';
 import Certificates from '@/components/sections/Certificates';
 import BeforeAfter from '@/components/sections/BeforeAfter';
@@ -32,7 +28,7 @@ export default async function Home() {
       {/* Dynamic top banner alert */}
       {cms.bannerEnabled && cms.bannerText && (
         <div className="bg-gradient-to-r from-primary to-accent text-white py-2.5 px-4 text-center text-xs font-bold font-sans tracking-wide z-50 relative animate-pulse">
-          <a href={cms.bannerLink || '/#bookings'}>{cms.bannerText}</a>
+          <a href={cms.bannerLink || '/booking'}>{cms.bannerText}</a>
         </div>
       )}
 
@@ -41,9 +37,6 @@ export default async function Home() {
       {/* 1. Hero — first impression + SEO H1 */}
       <Hero settings={settings} cms={cms} />
 
-      {/* 2. Interactive OPD & Consultation Booking Form */}
-      <BookingForm />
-
       {/* 3. Services */}
       <Services cms={cms} />
 
@@ -51,7 +44,7 @@ export default async function Home() {
       <About cms={cms} />
 
       {/* 5. Certificates */}
-      <Certificates />
+      <Certificates cms={cms} />
 
       {/* 6. Before & After */}
       <BeforeAfter />

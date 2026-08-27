@@ -5,7 +5,7 @@ import {
   Play, SkipForward, UserMinus, UserPlus, AlertCircle,
   CheckCircle2, Clock, Users, ArrowUp, ArrowDown, Star, RefreshCw,
   Search, ShieldAlert, HeartHandshake, X, ChevronLast, CheckSquare,
-  Phone, User, Stethoscope, Sparkles, MessageCircle, Activity,
+  Phone, PhoneCall, User, Stethoscope, Sparkles, MessageCircle, Activity,
   TrendingUp, UserCheck, UserX, Timer, MapPin, Mail,
   FileText, Pill, StickyNote, CalendarDays, CreditCard, DollarSign
 } from 'lucide-react';
@@ -115,6 +115,41 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
   const [searching, setSearching] = useState(false);
 
   const isDoctor = role === 'doctor';
+  const [callingStaff, setCallingStaff] = useState(false);
+
+  const handleCallStaff = async () => {
+    setCallingStaff(true);
+    try {
+      const nextPatient = waitingBookings[0];
+      const title = nextPatient ? `Calling: ${nextPatient.name}` : 'Call Staff';
+      const message = nextPatient 
+        ? `Slot: ${nextPatient.time}`
+        : 'Please come to Doctor\'s cabin';
+
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'create',
+          type: 'doctor-call',
+          title,
+          message 
+        }),
+      });
+
+      if (res.ok) {
+        setActionMsg(nextPatient ? `Called: ${nextPatient.name}` : 'Called Staff');
+        setTimeout(() => setActionMsg(''), 4000);
+      } else {
+        setError('Failed to send call notification');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Error calling staff');
+    } finally {
+      setCallingStaff(false);
+    }
+  };
 
   // Load services list
   useEffect(() => {
@@ -936,6 +971,18 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                 <UserPlus className="w-4 h-4 text-emerald-300" />
                 Register Walk-in
               </button>
+
+              {isDoctor && (
+                <button
+                  onClick={handleCallStaff}
+                  disabled={callingStaff}
+                  className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-115 text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-sm transition-all flex items-center gap-1.5 cursor-pointer outline-none shrink-0 disabled:opacity-50"
+                  title="Call Staff for Next Patient"
+                >
+                  <PhoneCall className="w-4 h-4 text-emerald-200" />
+                  Call Staff
+                </button>
+              )}
 
               <button onClick={onUpdate} className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-600 transition-colors cursor-pointer" title="Refresh Queue">
                 <RefreshCw className="w-4 h-4" />

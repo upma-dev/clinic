@@ -83,6 +83,21 @@ const DEFAULT_CMS: CMSContent = {
     { id: "g3", title: "PRP Session In Progress", imageUrl: "/assets/clinic-treatment.jpg", category: "Treatment" }
   ],
 
+  certificates: [
+    {
+      id: "c1",
+      title: "Board Certified in Dermatology",
+      institution: "IADVL (Indian Association of Dermatologists, Venereologists and Leprologists)",
+      image: "/assets/cert1.png"
+    },
+    {
+      id: "c2",
+      title: "Advanced Cosmetology Fellowship",
+      institution: "International Skin Care Institute",
+      image: "/assets/cert2.png"
+    }
+  ],
+
   contactAddress: "Skin Hub & Physio Centre, Rishi Nagar, Ujjain, Madhya Pradesh 456010",
   contactPhone: "+91 98270 42111",
   contactWhatsapp: "919827042111",

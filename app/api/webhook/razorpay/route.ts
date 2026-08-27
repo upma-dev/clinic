@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
         await createNotification(
           'payment_received',
           'Payment Captured (Webhook Verified)',
-          `${booking.name} paid Rs. ${amount} via Webhook. Status: ${nextStatus}.${tokenNumber ? ` Issued Token #${tokenNumber}.` : ''}`
+          `${booking.name} - Paid ₹${amount}${tokenNumber ? ` (Token #${tokenNumber})` : ''}`
         );
 
         // 5. Send automated emails
@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
         await createNotification(
           'booking_cancelled',
           'Payment Failed (Webhook Verified)',
-          `${booking.name}'s payment of Rs. ${amount} failed or expired.`
+          `${booking.name} - Payment of ₹${amount} failed/expired`
         );
 
         if (booking.email) {
@@ -254,7 +254,7 @@ export async function POST(req: NextRequest) {
         await createNotification(
           'booking_cancelled',
           'Refund Processed (Webhook Verified)',
-          `Refund of Rs. ${refundAmount} verified for ${booking.name}. Appointment Cancelled.`
+          `${booking.name} - Refund of ₹${refundAmount} processed`
         );
 
         if (booking.email) {
