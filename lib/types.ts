@@ -81,6 +81,7 @@ export interface Booking {
   razorpayPaymentLinkId?: string;
   meetingLink?: string;
   meetingPassword?: string;
+  meetingLinkSent?: boolean;
 }
 
 export interface DailyQueue {
@@ -214,6 +215,7 @@ export interface CMSContent {
   faqs: { question: string; answer: string }[];
   testimonials: { name: string; text: string; rating: number; role: string; imageUrl?: string }[];
   gallery: { id: string; title: string; imageUrl: string; category: string }[];
+  certificates?: { id: string; title: string; institution: string; image: string }[];
 
   contactAddress: string;
   contactPhone: string;
@@ -235,7 +237,7 @@ export interface CMSContent {
 export interface DbNotification {
   _id?: string;
   id: string;
-  type: 'booking_new' | 'booking_cancelled' | 'payment_received' | 'reminder_sent' | 'reschedule_request' | 'queue_update' | 'patient_arrived';
+  type: 'booking_new' | 'booking_cancelled' | 'payment_received' | 'reminder_sent' | 'reschedule_request' | 'queue_update' | 'patient_arrived' | 'doctor-call';
   title: string;
   message: string;
   read: boolean;

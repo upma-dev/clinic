@@ -10,6 +10,7 @@ import React from 'react';
 import { MapPin, Phone, Mail, Clock, ShieldAlert } from 'lucide-react';
 import { siteConfig } from '@/config/site';
 import type { ClinicSettings, CMSContent } from '@/lib/types';
+import { formatHHMM } from '@/lib/slots';
 
 interface ContactProps {
   settings?: ClinicSettings | null;
@@ -21,13 +22,15 @@ export default function Contact({ settings, cms }: ContactProps) {
   const phone = settings?.clinicPhone || siteConfig.phone;
   const whatsapp = settings?.clinicPhone?.replace(/[^0-9]/g, '') || siteConfig.whatsapp;
   const email = settings?.clinicEmail || cms?.contactEmail || siteConfig.email;
-  const timings = settings ? `${settings.morningStart} AM - ${settings.morningEnd} PM | ${settings.eveningStart} PM - ${settings.eveningEnd} PM (Sunday Closed)` : siteConfig.timings;
+  const timings = settings 
+    ? `${formatHHMM(settings.morningStart)} - ${formatHHMM(settings.morningEnd)} | ${formatHHMM(settings.eveningStart)} - ${formatHHMM(settings.eveningEnd)} (Sunday Closed)` 
+    : siteConfig.timings;
   const googleMapsEmbed = (cms?.googleMapsEmbed && !cms.googleMapsEmbed.includes('embed?pb='))
     ? cms.googleMapsEmbed
     : "https://www.google.com/maps?q=Rishi+Nagar+Ujjain+Madhya+Pradesh&output=embed";
 
   return (
-    <section id="contact" className="py-20 bg-[#F9F9FB]">
+    <section id="contact" className="py-12 sm:py-16 bg-[#F9F9FB]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Responsive Grid layout for contact details vs map localization */}

@@ -144,3 +144,68 @@ export function buildSlotAvailability(
 export function estimateWaitMinutes(waitingCount: number): number {
   return Math.max(5, waitingCount * 15);
 }
+
+/** Formats "HH:MM" 24h string into "hh:mm AM/PM" 12h string */
+export function formatHHMM(value: string): string {
+  if (!value) return '';
+  return minutesToTime(parseHHMM(value));
+}
+
+/** Extracts the main colony or area name from a full address string */
+export function getAreaFromAddress(address: string): string {
+  if (!address) return '';
+  const parts = address.split(',').map(p => p.trim());
+  
+  // 1. First, search for parts containing specific colony/area keywords
+  const colonyKeywords = ['nagar', 'colony', 'ganj', 'lines', 'sector', 'chowk', 'bazar', 'market', 'scheme', 'extension', 'phase', 'marg', 'path', 'street', 'enclave', 'road', 'ward'];
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (colonyKeywords.some(kw => lower.includes(kw))) {
+      return part;
+    }
+  }
+
+  // 2. If no colony keywords found, try to filter out building names, numbers, landmarks, and city names
+  const ignoreKeywords = ['shop', 'flat', 'house', 'building', 'plot', 'centre', 'center', 'clinic', 'hospital', 'hub', 'suite', 'floor', 'opposite', 'near', 'behind', 'ujjain', 'delhi', 'indore', 'bhopal', 'mumbai', 'pune', 'bangalore'];
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    const isBuildingOrLandmark = ignoreKeywords.some(kw => lower.includes(kw));
+    const isShortOrCode = /^[a-zA-Z0-9-]{1,6}$/.test(part); // e.g. "B-23", "102", "Block-A"
+    const hasOnlyNumbers = /^\d+$/.test(part.replace(/[^0-9]/g, ''));
+    
+    if (!isBuildingOrLandmark && !isShortOrCode && !hasOnlyNumbers) {
+      return part;
+    }
+  }
+
+  // 3. Absolute fallbacks
+  if (parts.length > 1) {
+    const firstPart = parts[0];
+    const isCode = /^[a-zA-Z0-9-]{1,6}$/.test(firstPart) || /^\d/.test(firstPart);
+    if (isCode) {
+      return parts[1];
+    }
+    return firstPart;
+  }
+
+  return parts[0] || '';
+}
+
+/** Formats a price string to ensure it has a Rupees icon (₹) if needed */
+export function formatPrice(price: string): string {
+  if (!price) return 'Consultation required';
+  const clean = price.trim();
+  if (clean.includes('₹') || /rs/i.test(clean)) {
+    return clean;
+  }
+  // Check if it starts with "From" followed by a number
+  if (/^from\s+\d+/i.test(clean)) {
+    return clean.replace(/^from\s+/i, 'From ₹');
+  }
+  // If it starts with a number or contains a number, and has no currency symbol
+  if (/^\b\d+/.test(clean)) {
+    return `₹${clean}`;
+  }
+  return clean;
+}
+

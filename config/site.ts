@@ -12,7 +12,7 @@ export const siteConfig = {
   credentials: "MBBS, DVD (Dermatology)",
   
   // Physical and Contact coordinates
-  location: "Skin Hub & Physio Centre, Rishi Nagar, Ujjain, Madhya Pradesh 456010",
+  location: "B-23, Bada Shopping Complex, Opposite Water Tank, Rishi Nagar, Ujjain, Madhya Pradesh 456010",
   whatsapp: "919827042111", // Format: [CountryCode][Number] without '+'
   phone: "+91 98270 42111",
   email: "contact@skinhubujjain.com",

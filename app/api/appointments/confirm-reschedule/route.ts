@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     await createNotification(
       'booking_new',
       'Reschedule Confirmed by Patient',
-      `${booking.name} confirmed their rescheduled appointment for ${booking.date} at ${booking.time}.${tokenNumber ? ` Issued Token #${tokenNumber}.` : ''}`
+      `${booking.name} - Slot: ${booking.time}${tokenNumber ? ` (Token #${tokenNumber})` : ''}`
     );
 
     // Return a beautiful HTML confirmation landing page

@@ -4,7 +4,7 @@ import type { ClinicSettings } from '../types';
 const DEFAULT_SETTINGS: ClinicSettings = {
   clinicName: "Dr. Prateek Tiwari's Skin Hub Derma, Hair & Laser Clinic",
   clinicLogo: '/assets/logo.png',
-  clinicAddress: 'Skin Hub & Physio Centre, Rishi Nagar, Ujjain, Madhya Pradesh 456010',
+  clinicAddress: 'B-23, Bada Shopping Complex, Opposite Water Tank, Rishi Nagar, Ujjain, Madhya Pradesh 456010',
   clinicPhone: '+91 98270 42111',
   clinicEmail: 'contact@skinhubujjain.com',
   morningStart: '09:00',

@@ -41,7 +41,7 @@ export default function Gallery({ cms }: GalleryProps) {
   })) || defaultGalleryItems;
 
   return (
-    <section id="gallery" className="py-20 bg-surface">
+    <section id="gallery" className="py-12 sm:py-16 bg-surface">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <div className="mb-14">
           <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-3">

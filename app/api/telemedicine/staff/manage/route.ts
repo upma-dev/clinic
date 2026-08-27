@@ -299,6 +299,8 @@ export async function POST(req: Request) {
             }
           } else if (booking.razorpayPaymentLinkId.startsWith('mock_plink_')) {
             const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const confirmSettings = await getClinicSettings();
+            const fee = confirmSettings.onlineConsultationFee || confirmSettings.consultationFee || 500;
             await db.collection(COLLECTIONS.bookings).updateOne(
               { id: booking.id },
               { 
@@ -306,7 +308,7 @@ export async function POST(req: Request) {
                   paymentStatus: 'paid',
                   status: 'confirmed',
                   razorpayPaymentId: 'mock_payment_' + Date.now(),
-                  amountPaid: 500,
+                  amountPaid: fee,
                   paidAt: new Date().toISOString(),
                   meetingLink: `https://meet.ffmuc.net/SkinHubClinic-${booking.id}`,
                   meetingPassword: roomPass,

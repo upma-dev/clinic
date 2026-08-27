@@ -48,7 +48,7 @@ export default function About({ cms }: AboutProps) {
   const credentialsList = cms?.aboutCredentials || defaultCredentials;
 
   return (
-    <section id="about" className="py-20 bg-white">
+    <section id="about" className="py-12 sm:py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
 
@@ -66,7 +66,10 @@ export default function About({ cms }: AboutProps) {
                 src={doctorImage}
                 alt={`${doctorName} — Best Dermatologist in Ujjain`}
                 fill
-                className="object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+                className="object-cover object-center transition-all duration-700 ease-out group-hover:[--scale:1.32]"
+                style={{
+                  transform: 'scale(var(--scale, 1.28)) translate(-10%, 4%)',
+                } as React.CSSProperties}
                 sizes="(max-width: 1024px) 100vw, 400px"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 pointer-events-none" />

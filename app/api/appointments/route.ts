@@ -224,11 +224,12 @@ export async function POST(req: NextRequest) {
     const uniqueId = Math.floor(10000 + Math.random() * 90000);
     const appointmentId = `SKNHB-${uniqueId}`;
 
-    const fee =
-      settings.onlineConsultationFee || settings.consultationFee || 200;
+    const fee = bookingType === 'online'
+      ? (settings.onlineConsultationFee || settings.consultationFee || 600)
+      : (settings.offlineConsultationFee || settings.consultationFee || 700);
 
     // Determine if upfront payment checkout is required
-    const requiresPayment = false;
+    const requiresPayment = bookingType === 'online' && !!settings.onlinePaymentMandatory;
 
     // Initial booking status transitions
     // All public bookings (online or offline type) start as 'pending' and require admin approval
@@ -287,7 +288,7 @@ export async function POST(req: NextRequest) {
         : requiresPayment
           ? "Pending Payment Booking"
           : "Confirmed Booking",
-      `${name} booked a ${bookingType === "offline" ? "clinic visit" : "consultation"} on ${date} at ${time} for ${service}. Status: ${initialStatus}`,
+      `${name} - Slot: ${time} (${service})`,
     );
 
     const waText = `*${settings.clinicName} — Booking ${initialStatus === "pending" ? "Requested" : "Confirmed"}*

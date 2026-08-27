@@ -657,12 +657,18 @@ export default function AppointmentsList({
                                       Join Meeting
                                     </a>
                                     <button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         const clinicName = 'Skin Hub Clinic';
                                         const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
                                         const msg = `*🌟 ${clinicName} — Online Video Consultation Link 🎥*\n\nNamaste *${bk.name}*! 🙏\n\nAapki payment successfully receive ho gayi hai aur aapka slot confirm ho gaya hai.\n\n💻 *Video Call details:*\n• *Time:* ${bk.time}\n• *Date:* ${bk.date}\n• *Meeting Link:* ${finalLink}\n${bk.meetingPassword ? `• *Meeting Password:* ${bk.meetingPassword}\n` : ''}\nKripya scheduled time se 5 min pehle link par click karke join karein.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad! 🙏`;
                                         const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
                                         window.open(waUrl, '_blank');
+                                        try {
+                                          await onAction(bk.id, 'mark-link-sent');
+                                          onRefresh();
+                                        } catch (err) {
+                                          console.error('Failed to mark link as sent:', err);
+                                        }
                                       }}
                                       className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
                                       title="Send Video Link via WhatsApp"
@@ -671,7 +677,7 @@ export default function AppointmentsList({
                                     </button>
                                   </>
                                 )}
-                                {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online')) && (
+                                {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online' && bk.meetingLinkSent)) && (
                                   <button
                                     onClick={() => onAction(bk.id, 'complete')}
                                     className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold uppercase cursor-pointer"
@@ -1097,12 +1103,18 @@ export default function AppointmentsList({
                             Join Meeting
                           </a>
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               const clinicName = 'Skin Hub Clinic';
                               const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
                               const msg = `*🌟 ${clinicName} — Online Video Consultation Link 🎥*\n\nNamaste *${bk.name}*! 🙏\n\nAapki payment successfully receive ho gayi hai aur aapka slot confirm ho gaya hai.\n\n💻 *Video Call details:*\n• *Time:* ${bk.time}\n• *Date:* ${bk.date}\n• *Meeting Link:* ${finalLink}\n${bk.meetingPassword ? `• *Meeting Password:* ${bk.meetingPassword}\n` : ''}\nKripya scheduled time se 5 min pehle link par click karke join karein.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad! 🙏`;
                               const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
                               window.open(waUrl, '_blank');
+                              try {
+                                await onAction(bk.id, 'mark-link-sent');
+                                onRefresh();
+                              } catch (err) {
+                                console.error('Failed to mark link as sent:', err);
+                              }
                             }}
                             className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
                             title="Send Video Link via WhatsApp"
@@ -1111,7 +1123,7 @@ export default function AppointmentsList({
                           </button>
                         </>
                       )}
-                      {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online')) && (
+                      {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online' && bk.meetingLinkSent)) && (
                         <button
                           onClick={() => onAction(bk.id, 'complete')}
                           className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold uppercase cursor-pointer animate-none"

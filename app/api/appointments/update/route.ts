@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
           await createNotification(
             'booking_new',
             'Booking Confirmed',
-            `${booking.name}'s appointment on ${booking.date} at ${booking.time} is now confirmed.`
+            `${booking.name} - Slot: ${booking.time} (Confirmed)`
           );
 
           if (booking.email) {
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
         await createNotification(
           'booking_new',
           'Appointment Rescheduled',
-          `${booking.name}'s appointment has been rescheduled to ${newDate} at ${newTime} due to: ${reason || 'Crowded clinic'}.`
+          `${booking.name} - Slot: ${newTime} (Rescheduled)`
         );
 
         if (booking.email) {
@@ -235,7 +235,9 @@ export async function POST(req: NextRequest) {
         const updateFields: any = { status: 'arrived' };
         if (paymentMethod) {
           const settings = await getClinicSettings();
-          const fee = settings.onlineConsultationFee || settings.consultationFee || 200;
+          const fee = booking.bookingType === 'online'
+            ? (settings.onlineConsultationFee || settings.consultationFee || 600)
+            : (settings.offlineConsultationFee || settings.consultationFee || 700);
           updateFields.paymentStatus = 'paid';
           updateFields.paymentMethod = paymentMethod;
           updateFields.amountPaid = fee;
@@ -288,6 +290,15 @@ export async function POST(req: NextRequest) {
           `${booking.name} was marked as a No-Show for their ${booking.time} slot.`
         );
         break;
+
+      case 'mark-link-sent': {
+        const dbLink = await getDb();
+        await dbLink.collection(COLLECTIONS.bookings).updateOne(
+          { id },
+          { $set: { meetingLinkSent: true, updatedAt: new Date().toISOString() } }
+        );
+        break;
+      }
 
       case 'complete':
       case 'completed': {
@@ -416,7 +427,9 @@ export async function POST(req: NextRequest) {
         const updateFields: any = { status: 'arrived' };
         if (paymentMethod) {
           const settings = await getClinicSettings();
-          const fee = settings.onlineConsultationFee || settings.consultationFee || 200;
+          const fee = booking.bookingType === 'online'
+            ? (settings.onlineConsultationFee || settings.consultationFee || 600)
+            : (settings.offlineConsultationFee || settings.consultationFee || 700);
           updateFields.paymentStatus = 'paid';
           updateFields.paymentMethod = paymentMethod;
           updateFields.amountPaid = fee;

@@ -13,7 +13,7 @@ export default async function ServicesPage() {
     <main className="min-h-screen bg-surface">
       <Navbar settings={settings} cms={cms} />
       <div className="pt-24 select-text">
-        <Services cms={cms} />
+        <Services cms={cms} isAllPage={true} />
       </div>
       <Footer settings={settings} cms={cms} />
     </main>

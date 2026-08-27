@@ -4,6 +4,7 @@ import { getPatientSession } from '@/lib/patientAuth';
 import { getDb, COLLECTIONS } from '@/lib/mongodb';
 import { TelemedicineAppointment } from '@/lib/db/telemedicine';
 import { createNotification } from '@/lib/db/notifications';
+import { getClinicSettings } from '@/lib/db/settings';
 
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
@@ -20,6 +21,9 @@ export async function POST(req: Request) {
     const db = await getDb();
     let patientId = session.phone; 
 
+    const settings = await getClinicSettings();
+    const fee = settings.onlineConsultationFee || settings.consultationFee || 500;
+
     if (isMock || (!RAZORPAY_KEY_SECRET && razorpay_order_id.startsWith('mock_order_'))) {
       const appointment: TelemedicineAppointment = {
         ...appointmentData,
@@ -28,7 +32,7 @@ export async function POST(req: Request) {
         paymentStatus: 'paid',
         razorpayOrderId: razorpay_order_id,
         razorpayPaymentId: 'mock_payment_' + Date.now(),
-        amountPaid: 500,
+        amountPaid: fee,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -74,7 +78,7 @@ export async function POST(req: Request) {
       paymentStatus: 'paid',
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
-      amountPaid: 500, // ₹500
+      amountPaid: fee, // ₹500 fallback
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

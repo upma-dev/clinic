@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     const db = await getDb();
     const settings = await db.collection(COLLECTIONS.settings).findOne({});
-    const fee = 600;
+    const fee = settings?.offlineConsultationFee || settings?.consultationFee || 700;
 
     // Verify online payment if paymentMethod is online
     if (paymentMethod === 'online') {

@@ -270,7 +270,7 @@ export default function BeforeAfter() {
   };
 
   return (
-    <section id="before-after" className="py-20 bg-white">
+    <section id="before-after" className="py-12 sm:py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section header */}
         <div className="text-center mb-14">
