@@ -62,7 +62,7 @@ export default function Testimonials({ cms }: TestimonialsProps) {
   }, [reviews.length, hovered]);
 
   return (
-    <section id="testimonials" className="py-22 bg-stone-50 select-none overflow-hidden relative border-t border-b border-gray-200">
+    <section id="testimonials" className="py-12 sm:py-16 bg-stone-50 select-none overflow-hidden relative border-t border-b border-gray-200">
 
       {/* Decorative Background Accent */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/5 rounded-full filter blur-3xl pointer-events-none" />

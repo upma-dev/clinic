@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getPatientSession } from '@/lib/patientAuth';
+import { getClinicSettings } from '@/lib/db/settings';
 
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-
-// ₹500 fixed fee for telemedicine
-const CONSULTATION_FEE_INR = 500; 
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET; 
 
 export async function POST(req: Request) {
   try {
@@ -14,11 +12,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const settings = await getClinicSettings();
+    const fee = settings.onlineConsultationFee || settings.consultationFee || 500;
+
     if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
       return NextResponse.json({
         isMock: true,
         orderId: `mock_order_${Date.now()}`,
-        amount: 50000,
+        amount: fee * 100,
         currency: 'INR',
         keyId: 'mock_key',
       });
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     const { receipt } = body; 
 
     const orderPayload = {
-      amount: CONSULTATION_FEE_INR * 100, // in paise
+      amount: fee * 100, // in paise
       currency: 'INR',
       receipt: receipt || `receipt_${Date.now()}`,
     };

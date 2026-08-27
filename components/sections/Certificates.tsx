@@ -2,22 +2,31 @@
 
 import React, { useState } from 'react';
 import { Award, CheckCircle, X } from 'lucide-react';
+import type { CMSContent } from '@/lib/types';
 
-export default function Certificates() {
-  const certificates = [
+interface CertificatesProps {
+  cms?: CMSContent | null;
+}
+
+export default function Certificates({ cms }: CertificatesProps) {
+  const defaultCertificates = [
     {
-      id: 1,
+      id: 'c1',
       title: 'Board Certified in Dermatology',
-      institution: 'IADVL',
+      institution: 'IADVL (Indian Association of Dermatologists, Venereologists and Leprologists)',
       image: '/assets/cert1.png',
     },
     {
-      id: 2,
+      id: 'c2',
       title: 'Advanced Cosmetology Fellowship',
       institution: 'International Skin Care Institute',
       image: '/assets/cert2.png',
     },
   ];
+
+  const certificates = cms?.certificates && cms.certificates.length > 0
+    ? cms.certificates
+    : defaultCertificates;
 
   const [activeCertImage, setActiveCertImage] = useState<string | null>(null);
 
@@ -27,7 +36,7 @@ export default function Certificates() {
     : null;
 
   return (
-    <section className="py-20 bg-gray-50 border-t border-gray-200">
+    <section className="py-12 sm:py-16 bg-gray-50 border-t border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         <div className="text-center max-w-3xl mx-auto mb-16">

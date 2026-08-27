@@ -1,17 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  LogOut, PlusCircle, Trash2, BookOpen, Settings, Bell, Menu, X, Edit, 
+import {
+  LogOut, PlusCircle, Trash2, BookOpen, Settings, Bell, Menu, X, Edit,
   Eye, FileText, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, ShieldCheck, RefreshCw, Plus, Save,
   Users, DollarSign, Calendar, Clock, Lock, Upload, Sparkles, HelpCircle,
-  Briefcase, Image as ImageIcon, AlertCircle, Search, Video
+  Briefcase, Image as ImageIcon, AlertCircle, Search, Video, PhoneCall, Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppointmentsList from './AppointmentsList';
 import QueueControls from './QueueControls';
 import DoctorTelemedicineView from '../doctor/DoctorTelemedicineView';
 import type { Booking, ClinicSettings, BlogPost, CMSContent, DbNotification, DailyQueue, QueueEntry } from '@/lib/types';
+import { formatPrice } from '@/lib/slots';
 
 interface DoctorDashboardProps {
   onLogout: () => void;
@@ -36,11 +37,29 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
   const [daily, setDaily] = useState<DailyQueue | null>(null);
   const [entries, setEntries] = useState<QueueEntry[]>([]);
-  
+
   // Settings & CMS States
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [cms, setCms] = useState<CMSContent | null>(null);
-  
+
+  // Service/Treatment CRUD States
+  const [serviceFormMode, setServiceFormMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeServiceIdx, setActiveServiceIdx] = useState<number | null>(null);
+  const [serviceForm, setServiceForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+  });
+
+  // Certificate CRUD States
+  const [certFormMode, setCertFormMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeCertIdx, setActiveCertIdx] = useState<number | null>(null);
+  const [certForm, setCertForm] = useState({
+    title: '',
+    institution: '',
+    image: '',
+  });
+
   // Blog Management States
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [blogTotal, setBlogTotal] = useState(0);
@@ -68,11 +87,11 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   // Notification States
   const [notifications, setNotifications] = useState<DbNotification[]>([]);
   const [notifTrayOpen, setNotifTrayOpen] = useState(false);
-  const [lastNotificationCount, setLastNotificationCount] = useState(0);
 
   // Quick Action Toggles
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [callingStaff, setCallingStaff] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
     title: string;
@@ -82,6 +101,69 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
   const today = new Date().toISOString().split('T')[0];
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastSeenNotifIdRef = useRef<string | null>(null);
+  const isFirstLoadRef = useRef(true);
+
+  const playPing = useCallback(() => {
+    try {
+      if (!audioRef.current) {
+        audioRef.current = new Audio('/notification.mp3');
+      }
+      audioRef.current.currentTime = 0; // Reset playback to start
+      audioRef.current.volume = 0.8; // Set volume to 80% for clarity
+      audioRef.current.play()
+        .then(() => {
+          console.log('✅ playPing: Sound played successfully.');
+        })
+        .catch((err) => {
+          console.warn('❌ playPing: HTML5 Audio play was blocked by browser autoplay policy. User must interact with the page first:', err);
+        });
+    } catch (err) {
+      console.error('❌ playPing: Error initializing or playing audio:', err);
+    }
+  }, []);
+
+  const triggerToast = useCallback((text: string) => {
+    setMsg(text);
+    setTimeout(() => setMsg(''), 12000); // 12 seconds to match staff dashboard
+  }, []);
+
+  const handleNewNotifications = useCallback((notifs: DbNotification[]) => {
+    if (!notifs || notifs.length === 0) {
+      lastSeenNotifIdRef.current = null;
+      isFirstLoadRef.current = false;
+      return;
+    }
+
+    const latestNotif = notifs[0]; // Sorted newest first (createdAt: -1)
+    const latestId = latestNotif.id;
+
+    if (isFirstLoadRef.current) {
+      lastSeenNotifIdRef.current = latestId;
+      isFirstLoadRef.current = false;
+      return;
+    }
+
+    const previousId = lastSeenNotifIdRef.current;
+
+    if (latestId !== previousId) {
+      const newNotifs: DbNotification[] = [];
+      for (const n of notifs) {
+        if (n.id === previousId) break;
+        if (!n.read) {
+          newNotifs.push(n);
+        }
+      }
+
+      if (newNotifs.length > 0) {
+        playPing();
+        const newestUnread = newNotifs[0];
+        triggerToast(`${newestUnread.title}: ${newestUnread.message}`);
+      }
+
+      lastSeenNotifIdRef.current = latestId;
+    }
+  }, [playPing, triggerToast]);
 
   // Load configs and data
   const refresh = useCallback(async () => {
@@ -115,19 +197,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
         setBlogTotal(blogData.total || 0);
       }
       if (notifRes.ok) {
-        const notifs = await notifRes.json();
-        setNotifications(notifs || []);
-        
-        // Trigger notification sound if new notification arrives
-        const unreadCount = notifs.filter((n: DbNotification) => !n.read).length;
-        if (unreadCount > lastNotificationCount && lastNotificationCount > 0) {
-          playPing();
-          const latestNotif = notifs.find((n: DbNotification) => !n.read);
-          if (latestNotif) {
-            triggerToast(`${latestNotif.title}: ${latestNotif.message}`);
-          }
-        }
-        setLastNotificationCount(unreadCount);
+        const allNotifs: DbNotification[] = await notifRes.json();
+        const filteredNotifs = (allNotifs || []).filter(n => n.type === 'booking_new');
+        setNotifications(filteredNotifs);
+        handleNewNotifications(filteredNotifs);
       }
       if (queueRes.ok) {
         const qData = await queueRes.json();
@@ -137,7 +210,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
     } catch (e) {
       console.error(e);
     }
-  }, [today, blogSearch, blogCategoryFilter, blogPage, lastNotificationCount]);
+  }, [today, blogSearch, blogCategoryFilter, blogPage, handleNewNotifications]);
 
   // Helper helper to format appt fetch
   const appapptRes = async (res: Response) => {
@@ -145,52 +218,102 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   };
 
   useEffect(() => {
+    const handleFirstInteraction = () => {
+      if (!audioRef.current) {
+        audioRef.current = new Audio('/notification.mp3');
+        audioRef.current.load();
+      } else {
+        audioRef.current.load();
+      }
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+    };
+    window.addEventListener('click', handleFirstInteraction);
+    window.addEventListener('keydown', handleFirstInteraction);
+    return () => {
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+    };
+  }, []);
+
+  const refreshData = useCallback(async () => {
+    try {
+      const [apptRes, allApptRes, notifRes, queueRes] = await Promise.all([
+        fetch(`/api/appointments?date=${today}`),
+        fetch('/api/appointments'),
+        fetch('/api/notifications'),
+        fetch(`/api/queue?date=${today}`)
+      ]);
+
+      if (apptRes.ok) {
+        const data = await apptRes.json();
+        setBookings(data.filter((b: Booking) => b.date === today));
+      }
+      if (allApptRes.ok) {
+        setAllBookings(await allApptRes.json());
+      }
+      if (notifRes.ok) {
+        const allNotifs: DbNotification[] = await notifRes.json();
+        const filteredNotifs = (allNotifs || []).filter(n => n.type === 'booking_new');
+        setNotifications(filteredNotifs);
+        handleNewNotifications(filteredNotifs);
+      }
+      if (queueRes.ok) {
+        const qData = await queueRes.json();
+        setDaily(qData.daily);
+        setEntries(qData.entries);
+      }
+    } catch { }
+  }, [today, handleNewNotifications]);
+
+  useEffect(() => {
     refresh();
-    // Poll notifications every 8 seconds
+    // Poll appointments, queue status, and notifications every 8 seconds
     const interval = setInterval(() => {
-      refreshNotificationsOnly();
+      refreshData();
     }, 8000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, refreshData]);
 
-  const refreshNotificationsOnly = async () => {
-    try {
-      const notifRes = await fetch('/api/notifications');
-      if (notifRes.ok) {
-        const notifs = await notifRes.json();
-        setNotifications(notifs || []);
-        const unreadCount = notifs.filter((n: DbNotification) => !n.read).length;
-        if (unreadCount > lastNotificationCount && lastNotificationCount > 0) {
-          playPing();
-          const latestNotif = notifs.find((n: DbNotification) => !n.read);
-          if (latestNotif) {
-            triggerToast(`${latestNotif.title}: ${latestNotif.message}`);
-          }
-        }
-        setLastNotificationCount(unreadCount);
-      }
-    } catch {}
-  };
-
-  const playPing = () => {
-    try {
-      if (!audioRef.current) {
-        audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-84.wav');
-      }
-      audioRef.current.volume = 0.3;
-      audioRef.current.play();
-    } catch {}
-  };
-
-  const triggerToast = (text: string) => {
-    setMsg(text);
-    setTimeout(() => setMsg(''), 4000);
-  };
+  // Cleaned up duplicate playPing and triggerToast definitions
 
   // Logouts
   const logout = async () => {
     await fetch('/api/auth/login', { method: 'DELETE' });
     onLogout();
+  };
+
+  const handleCallStaff = async () => {
+    setCallingStaff(true);
+    try {
+      const nextPatient = waitingBookings[0];
+      const title = nextPatient ? `Calling: ${nextPatient.name}` : 'Call Staff';
+      const message = nextPatient
+        ? `Slot: ${nextPatient.time}`
+        : 'Please come to Doctor\'s cabin';
+
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          type: 'doctor-call',
+          title,
+          message
+        }),
+      });
+
+      if (res.ok) {
+        triggerToast(nextPatient ? `Called: ${nextPatient.name}` : 'Called Staff');
+      } else {
+        triggerToast('Failed to send call notification');
+      }
+    } catch (err) {
+      console.error(err);
+      triggerToast('Error calling staff');
+    } finally {
+      setCallingStaff(false);
+    }
   };
 
   // General POST setting updates
@@ -211,16 +334,107 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   // General CMS updates
   const saveCms = async (patch: Partial<CMSContent>) => {
     setLoading(true);
-    const res = await fetch('/api/cms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    if (res.ok) {
-      triggerToast('Homepage CMS updated live');
-      refresh();
+    try {
+      const res = await fetch('/api/cms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        triggerToast('Homepage CMS updated live');
+        refresh();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        const errMsg = errorData.error || `Error ${res.status}: ${res.statusText}`;
+        triggerToast(`Save failed: ${errMsg}`);
+        console.error('saveCms failed:', errMsg);
+      }
+    } catch (err) {
+      triggerToast(`Save failed: ${err instanceof Error ? err.message : 'Network error'}`);
+      console.error('saveCms exception:', err);
     }
     setLoading(false);
+  };
+
+  // Treatments/Services CRUD Handlers
+  const handleDeleteService = async (idx: number) => {
+    if (!cms) return;
+    if (confirm('Are you sure you want to delete this treatment?')) {
+      const updatedServices = cms.services.filter((_, i) => i !== idx);
+      const newCms = { ...cms, services: updatedServices };
+      setCms(newCms);
+      await saveCms(newCms);
+    }
+  };
+
+  const handleSaveService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cms) return;
+    if (!serviceForm.name || !serviceForm.description || !serviceForm.price) {
+      alert('Please fill in Name, Description, and Price.');
+      return;
+    }
+
+    const updatedServices = [...cms.services];
+    const serviceData = {
+      id: serviceForm.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      name: serviceForm.name,
+      description: serviceForm.description,
+      price: serviceForm.price,
+    };
+
+    if (serviceFormMode === 'edit' && activeServiceIdx !== null) {
+      updatedServices[activeServiceIdx] = serviceData;
+    } else {
+      updatedServices.push(serviceData);
+    }
+
+    const newCms = { ...cms, services: updatedServices };
+    setCms(newCms);
+    setServiceFormMode('list');
+    setActiveServiceIdx(null);
+    await saveCms(newCms);
+  };
+
+  // Certificate CRUD Handlers
+  const handleDeleteCertificate = async (idx: number) => {
+    if (!cms) return;
+    if (confirm('Are you sure you want to delete this certificate?')) {
+      const updatedCerts = (cms.certificates || []).filter((_, i) => i !== idx);
+      const newCms = { ...cms, certificates: updatedCerts };
+      setCms(newCms);
+      await saveCms(newCms);
+    }
+  };
+
+  const handleSaveCertificate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cms) return;
+    if (!certForm.title || !certForm.institution || !certForm.image) {
+      alert('Please fill in Title, Institution, and Upload an Image.');
+      return;
+    }
+
+    const updatedCerts = [...(cms.certificates || [])];
+    const certData = {
+      id: `c-${Date.now()}`,
+      title: certForm.title,
+      institution: certForm.institution,
+      image: certForm.image,
+    };
+
+    if (certFormMode === 'edit' && activeCertIdx !== null) {
+      const originalId = updatedCerts[activeCertIdx]?.id || certData.id;
+      updatedCerts[activeCertIdx] = { ...certData, id: originalId };
+    } else {
+      updatedCerts.push(certData);
+    }
+
+    const newCms = { ...cms, certificates: updatedCerts };
+    setCms(newCms);
+    setCertFormMode('list');
+    setActiveCertIdx(null);
+    await saveCms(newCms);
   };
 
   // Image Upload handler
@@ -251,7 +465,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'mark_read', id }),
     });
-    refreshNotificationsOnly();
+    refreshData();
   };
 
   const markAllNotifRead = async () => {
@@ -260,7 +474,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'mark_all_read' }),
     });
-    refreshNotificationsOnly();
+    refreshData();
     triggerToast('All notifications marked as read');
   };
 
@@ -275,7 +489,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'clear_all' }),
         });
-        refreshNotificationsOnly();
+        refreshData();
       }
     });
   };
@@ -382,18 +596,45 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
   // Dynamic Statistics Calculations
   const todayBookings = allBookings.filter(b => b.date === today && b.status !== 'cancelled');
+
+  // Waiting bookings helper (to call staff for the next patient)
+  const parseTimeToMinutes = (timeStr: string) => {
+    if (!timeStr) return 0;
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (hours === 12) hours = 0;
+    if (modifier === 'PM') hours += 12;
+    return hours * 60 + minutes;
+  };
+
+  const sortBookings = (list: Booking[]) =>
+    [...list].sort((a, b) => {
+      const timeA = parseTimeToMinutes(a.time || '');
+      const timeB = parseTimeToMinutes(b.time || '');
+      if (timeA !== timeB) return timeA - timeB;
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    });
+
+  const activeQueueBookings = todayBookings.filter(b => b.status !== 'pending');
+  const WAITING_STATUSES = ['confirmed', 'booked', 'checked-in', 'arrived'];
+  const SERVING_STATUSES = ['arrived'];
+
+  const waitingBookings = sortBookings(
+    activeQueueBookings.filter(b => WAITING_STATUSES.includes(b.status as string) && !SERVING_STATUSES.includes(b.status as string))
+  );
+
   const onlineBookingsCount = todayBookings.filter(b => b.source === 'online').length;
   const offlineBookingsCount = todayBookings.filter(b => b.source === 'walk-in').length;
   const waitingPatientsCount = todayBookings.filter(b => b.status === 'arrived' || b.status === 'confirmed').length; // Waiting in lobby
   const completedConsultations = todayBookings.filter(b => b.status === 'completed').length;
-  
+
   const todayRevenue = todayBookings.reduce((sum, b) => {
     if (b.paymentStatus === 'paid') return sum + (b.amountPaid || 200);
     return sum;
   }, 0);
 
   const pendingPaymentsCount = todayBookings.filter(b => b.paymentStatus !== 'paid' && b.status !== 'completed').length;
-  
+
   // Notification states
   const unreadNotifs = notifications.filter(n => !n.read);
 
@@ -421,7 +662,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               <div className="text-[10px] font-bold text-gray-500 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {v}
               </div>
-              <motion.div 
+              <motion.div
                 initial={{ height: 0 }}
                 animate={{ height: `${pct}%` }}
                 transition={{ duration: 0.6, delay: idx * 0.1 }}
@@ -473,7 +714,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
   return (
     <div className="h-screen w-full bg-[#F4F6F8] font-sans flex flex-row overflow-hidden select-text">
-      
+
       {/* Floating Open Handle on Left Edge when Desktop Sidebar is Collapsed */}
       {!sidebarOpen && (
         <button
@@ -530,22 +771,20 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
             <div className="bg-[#112334] p-1 rounded-xl flex items-center gap-1 border border-white/5">
               <button
                 onClick={() => setTab('overview')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                  tab !== 'telemedicine'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
-                    : 'text-gray-400 hover:text-white'
-                }`}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${tab !== 'telemedicine'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-white'
+                  }`}
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>Console</span>
               </button>
               <button
                 onClick={() => setTab('telemedicine')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                  tab === 'telemedicine'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
-                    : 'text-gray-400 hover:text-white'
-                }`}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${tab === 'telemedicine'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-white'
+                  }`}
               >
                 <Video className="w-3.5 h-3.5" />
                 <span>Consults</span>
@@ -565,11 +804,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               </div>
               <button
                 onClick={() => setTab('overview')}
-                className={`w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-all ${
-                  tab === 'overview'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
+                className={`w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-all ${tab === 'overview'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Users className="w-4 h-4 text-emerald-400" />
@@ -597,9 +835,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     <span>Clinic Operations</span>
                   </div>
                   <ChevronDown
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                      expandedGroups.clinic ? 'rotate-180' : ''
-                    }`}
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedGroups.clinic ? 'rotate-180' : ''
+                      }`}
                   />
                 </button>
 
@@ -614,11 +851,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                       <button
                         key={sub.id}
                         onClick={() => setTab(sub.id)}
-                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
-                          tab === sub.id
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
-                        }`}
+                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${tab === sub.id
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                          }`}
                       >
                         <span className="flex items-center gap-2">
                           <span className={tab === sub.id ? 'text-emerald-400' : 'text-gray-500'}>•</span>
@@ -650,9 +886,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     <span>Editorial & Homepage</span>
                   </div>
                   <ChevronDown
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                      expandedGroups.content ? 'rotate-180' : ''
-                    }`}
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedGroups.content ? 'rotate-180' : ''
+                      }`}
                   />
                 </button>
 
@@ -665,11 +900,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                       <button
                         key={sub.id}
                         onClick={() => setTab(sub.id)}
-                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
-                          tab === sub.id
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
-                        }`}
+                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${tab === sub.id
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                          }`}
                       >
                         <span className="flex items-center gap-2">
                           <span className={tab === sub.id ? 'text-emerald-400' : 'text-gray-500'}>•</span>
@@ -701,9 +935,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     <span>Online Video Consults</span>
                   </div>
                   <ChevronDown
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                      expandedGroups.consult ? 'rotate-180' : ''
-                    }`}
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedGroups.consult ? 'rotate-180' : ''
+                      }`}
                   />
                 </button>
 
@@ -711,11 +944,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                   <div className="pl-4 space-y-1 border-l-2 border-indigo-500/30 ml-3.5">
                     <button
                       onClick={() => setTab('telemedicine')}
-                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold transition-all ${
-                        tab === 'telemedicine'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
-                      }`}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold transition-all ${tab === 'telemedicine'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
                     >
                       <span className="flex items-center gap-2">
                         <span className={tab === 'telemedicine' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
@@ -734,11 +966,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                           <button
                             key={sub.stage}
                             onClick={() => setTelemedicineStage(sub.stage)}
-                            className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${
-                              telemedicineStage === sub.stage
-                                ? 'bg-emerald-400/20 text-emerald-300'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
-                            }`}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${telemedicineStage === sub.stage
+                              ? 'bg-emerald-400/20 text-emerald-300'
+                              : 'text-gray-400 hover:text-white hover:bg-white/5'
+                              }`}
                           >
                             {sub.label}
                           </button>
@@ -753,12 +984,15 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
           {/* 4. Sidebar Footer */}
           <div className="p-4 border-t border-[#1B2D3D] bg-[#07131E] flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2 text-[11px] text-gray-400 font-bold">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>Skin Hub Admin v2.0</span>
+            </div>
             <button
-              onClick={logout}
-              className="w-full px-3 py-2 rounded-xl flex items-center gap-2.5 font-sans text-xs font-bold uppercase tracking-wider text-rose-400 hover:bg-rose-500/10 transition-colors outline-none"
+              onClick={() => setSidebarOpen(false)}
+              className="text-[10px] font-bold text-gray-500 hover:text-gray-300 underline"
             >
-              <LogOut className="w-4 h-4" />
-              <span>Sign Out</span>
+              Hide
             </button>
           </div>
         </div>
@@ -767,7 +1001,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       {/* Mobile Sticky Header */}
       <header className="lg:hidden sticky top-0 z-30 bg-[#0B1B29] text-white px-4 py-3.5 flex justify-between items-center shadow-lg border-b border-[#1B2D3D]">
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={() => setSidebarOpen(true)}
             className="p-1 rounded-lg hover:bg-white/10"
             aria-label="Open menu"
@@ -780,8 +1014,17 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setNotifTrayOpen(true)} 
+          <button
+            onClick={handleCallStaff}
+            disabled={callingStaff}
+            className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-emerald-400 disabled:opacity-50 flex items-center justify-center outline-none"
+            title="Call Staff"
+            aria-label="Call Staff"
+          >
+            <PhoneCall className="w-4 h-4 text-emerald-400" />
+          </button>
+          <button
+            onClick={() => setNotifTrayOpen(true)}
             className="p-2 bg-white/10 rounded-full relative"
             aria-label="View notifications"
           >
@@ -792,8 +1035,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               </span>
             )}
           </button>
-          <button 
-            onClick={logout} 
+          <button
+            onClick={logout}
             className="p-2 bg-white/10 rounded-full hover:bg-rose-500/20"
             aria-label="Logout"
           >
@@ -806,14 +1049,14 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       <AnimatePresence>
         {sidebarOpen && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden fixed inset-0 bg-black z-40"
             />
-            <motion.div 
+            <motion.div
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
@@ -840,11 +1083,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                         setTab(item.id);
                         setSidebarOpen(false);
                       }}
-                      className={`w-full px-4 py-3 rounded-xl flex items-center gap-3 font-sans text-xs font-bold uppercase tracking-wider transition-all outline-none ${
-                        tab === item.id 
-                          ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg' 
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
-                      }`}
+                      className={`w-full px-4 py-3 rounded-xl flex items-center gap-3 font-sans text-xs font-bold uppercase tracking-wider transition-all outline-none ${tab === item.id
+                        ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
                     >
                       {item.icon}
                       {item.label}
@@ -853,15 +1095,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                 </nav>
               </div>
 
-              <div className="pt-4 border-t border-[#1B2D3D]">
-                <button
-                  onClick={logout}
-                  className="w-full px-4 py-3 rounded-xl flex items-center gap-3 font-sans text-xs font-bold uppercase tracking-wider text-rose-400 hover:bg-rose-500/10 transition-colors outline-none"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sign Out
-                </button>
-              </div>
+              {/* Bottom sidebar space */}
             </motion.div>
           </>
         )}
@@ -870,1426 +1104,1815 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       {/* Main Workspace Right Container with Independent Vertical Scroll */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto bg-[#F4F6F8]">
         <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
-        
-        {/* Top Header Row for Desktop */}
-        <div className="hidden lg:flex justify-between items-center pb-4 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            {!sidebarOpen && (
+
+          {/* Top Header Row for Desktop */}
+          <div className="hidden lg:flex justify-between items-center pb-4 border-b border-gray-200">
+            <div className="flex items-center gap-3">
+              {!sidebarOpen && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="p-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 transition-colors shadow-xs"
+                  title="Show Sidebar"
+                >
+                  <Menu className="w-5 h-5 text-gray-700" />
+                </button>
+              )}
+              <div>
+                <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
+                  {tab === 'overview' && 'Administrative Console'}
+                  {tab === 'queue' && 'Queue Management Board'}
+                  {tab === 'prepaid' && 'Online Pre-paid Log'}
+                  {tab === 'settings' && 'Clinic Configuration'}
+                  {tab === 'booking-rules' && 'Appointment Scheduler Toggles'}
+                  {tab === 'blogs' && 'Dermatology Editorial Library'}
+                  {tab === 'cms' && 'Dynamic Homepage Blocks'}
+                  {tab === 'telemedicine' && 'Online Video Consultations'}
+                </h1>
+                <p className="text-xs text-gray-500 font-semibold mt-1">
+                  Welcome back, Doctor. Manage active patients, clinic rules, blogs, and layouts.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
               <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 transition-colors shadow-xs"
-                title="Show Sidebar"
+                onClick={refresh}
+                className="p-2.5 bg-white border rounded-xl shadow-xs hover:bg-gray-55 outline-none transition-all hover:rotate-180"
+                title="Refresh console"
               >
-                <Menu className="w-5 h-5 text-gray-700" />
+                <RefreshCw className="w-4 h-4 text-gray-500" />
               </button>
-            )}
-            <div>
-              <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
-                {tab === 'overview' && 'Administrative Console'}
-                {tab === 'queue' && 'Queue Management Board'}
-                {tab === 'prepaid' && 'Online Pre-paid Log'}
-                {tab === 'settings' && 'Clinic Configuration'}
-                {tab === 'booking-rules' && 'Appointment Scheduler Toggles'}
-                {tab === 'blogs' && 'Dermatology Editorial Library'}
-                {tab === 'cms' && 'Dynamic Homepage Blocks'}
-                {tab === 'telemedicine' && 'Online Video Consultations'}
-              </h1>
-              <p className="text-xs text-gray-500 font-semibold mt-1">
-                Welcome back, Doctor. Manage active patients, clinic rules, blogs, and layouts.
-              </p>
+              <button
+                onClick={() => setNotifTrayOpen(true)}
+                className="p-2.5 bg-white border rounded-xl shadow-xs relative hover:bg-gray-55 outline-none transition-colors"
+              >
+                <Bell className="w-5 h-5 text-gray-600" />
+                {unreadNotifs.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-rose-600 border border-white flex items-center justify-center text-[9px] font-bold text-white leading-none">
+                    {unreadNotifs.length}
+                  </span>
+                )}
+              </button>
+              <div className="h-8 w-[1px] bg-gray-200" />
+              <button
+                onClick={handleCallStaff}
+                disabled={callingStaff}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                title="Call Staff for Next Patient"
+              >
+                <PhoneCall className="w-4 h-4 text-emerald-600" />
+                <span>Call Staff</span>
+              </button>
+              <div className="h-8 w-[1px] bg-gray-200" />
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setNotifTrayOpen(true)}
-              className="p-2.5 bg-white border rounded-xl shadow-xs relative hover:bg-gray-55 outline-none transition-colors"
+
+
+          {/* Content Tabs Switcher */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
             >
-              <Bell className="w-5 h-5 text-gray-600" />
-              {unreadNotifs.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-rose-600 border border-white flex items-center justify-center text-[9px] font-bold text-white leading-none">
-                  {unreadNotifs.length}
-                </span>
+
+              {/* OVERVIEW PANEL */}
+              {tab === 'overview' && (
+                <div className="space-y-6">
+
+                  {/* Statistics Matrix */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+                    {/* Today's Appointments Card */}
+                    <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Today's Bookings</span>
+                        <h3 className="font-playfair text-2.5xl font-extrabold text-gray-900 leading-none">{todayBookings.length}</h3>
+                        <p className="text-[10px] text-gray-500 font-semibold">
+                          {onlineBookingsCount} Online • {offlineBookingsCount} Walk-ins
+                        </p>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shadow-inner shrink-0">
+                        <Calendar className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Patients Waiting Card */}
+                    <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Patients Waiting</span>
+                        <h3 className="font-playfair text-2.5xl font-extrabold text-[#F39C12] leading-none">{waitingPatientsCount}</h3>
+                        <p className="text-[10px] text-gray-500 font-semibold">In active clinic queue</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-[#FEF9E7] text-[#F39C12] flex items-center justify-center shadow-inner shrink-0">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Today's Consultations Completed */}
+                    <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Completed Sessions</span>
+                        <h3 className="font-playfair text-2.5xl font-extrabold text-teal-600 leading-none">{completedConsultations}</h3>
+                        <p className="text-[10px] text-gray-500 font-semibold">Ready & discharged</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shadow-inner shrink-0">
+                        <CheckCircle className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Revenue Card */}
+                    <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Today's Revenue</span>
+                        <h3 className="font-playfair text-2.5xl font-extrabold text-emerald-700 leading-none">₹{todayRevenue}</h3>
+                        <p className="text-[10px] text-rose-500 font-semibold font-sans">{pendingPaymentsCount} Unpaid pending</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shadow-inner shrink-0">
+                        <DollarSign className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Main Full-Width Bookings List */}
+                  <div className="w-full space-y-4">
+                    <AppointmentsList
+                      bookings={allBookings}
+                      loading={false}
+                      onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason) => {
+                        const res = await fetch('/api/appointments/update', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            id,
+                            action,
+                            nextScheduleDate,
+                            newDate: rescheduleDate,
+                            newTime: rescheduleTime,
+                            reason: rescheduleReason
+                          }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          triggerToast(`Action "${action}" completed`);
+                          refresh();
+                          return data; // returns { whatsappUrl } if available
+                        }
+                      }}
+                      onRefresh={refresh}
+                      role="doctor"
+                    />
+                  </div>
+
+                </div>
               )}
-            </button>
-            <div className="h-8 w-[1px] bg-gray-200" />
-            <button 
-              onClick={refresh}
-              className="p-2.5 bg-white border rounded-xl shadow-xs hover:bg-gray-55 outline-none transition-all hover:rotate-180"
-              title="Refresh console"
-            >
-              <RefreshCw className="w-4 h-4 text-gray-500" />
-            </button>
-          </div>
-        </div>
 
+              {/* QUEUE CONTROLS TAB */}
+              {tab === 'queue' && (
+                <QueueControls todayBookings={bookings} onUpdate={refresh} role="doctor" />
+              )}
 
-
-        {/* Content Tabs Switcher */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            transition={{ duration: 0.2 }}
-          >
-            
-            {/* OVERVIEW PANEL */}
-            {tab === 'overview' && (
-              <div className="space-y-6">
-                
-                {/* Statistics Matrix */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  
-                  {/* Today's Appointments Card */}
-                  <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Today's Bookings</span>
-                      <h3 className="font-playfair text-2.5xl font-extrabold text-gray-900 leading-none">{todayBookings.length}</h3>
-                      <p className="text-[10px] text-gray-500 font-semibold">
-                        {onlineBookingsCount} Online • {offlineBookingsCount} Walk-ins
-                      </p>
-                    </div>
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shadow-inner shrink-0">
-                      <Calendar className="w-5 h-5" />
-                    </div>
+              {/* PRE-PAID LOG */}
+              {tab === 'prepaid' && (
+                <div className="bg-white border rounded-2xl shadow-xs overflow-hidden">
+                  <div className="p-6 border-b">
+                    <h3 className="font-bold text-lg text-gray-900">Pre-Paid Online Logins</h3>
+                    <p className="text-xs text-gray-500 mt-1 font-semibold">Skip billing queue directly. Generate Prescription directly.</p>
                   </div>
 
-                  {/* Patients Waiting Card */}
-                  <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Patients Waiting</span>
-                      <h3 className="font-playfair text-2.5xl font-extrabold text-[#F39C12] leading-none">{waitingPatientsCount}</h3>
-                      <p className="text-[10px] text-gray-500 font-semibold">In active clinic queue</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-xl bg-[#FEF9E7] text-[#F39C12] flex items-center justify-center shadow-inner shrink-0">
-                      <Clock className="w-5 h-5" />
-                    </div>
-                  </div>
-
-                  {/* Today's Consultations Completed */}
-                  <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Completed Sessions</span>
-                      <h3 className="font-playfair text-2.5xl font-extrabold text-teal-600 leading-none">{completedConsultations}</h3>
-                      <p className="text-[10px] text-gray-500 font-semibold">Ready & discharged</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shadow-inner shrink-0">
-                      <CheckCircle className="w-5 h-5" />
-                    </div>
-                  </div>
-
-                  {/* Revenue Card */}
-                  <div className="bg-white border rounded-2xl p-5 shadow-xs flex items-start justify-between hover:shadow-md transition-all duration-300">
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-bold tracking-wider text-gray-500 uppercase block">Today's Revenue</span>
-                      <h3 className="font-playfair text-2.5xl font-extrabold text-emerald-700 leading-none">₹{todayRevenue}</h3>
-                      <p className="text-[10px] text-rose-500 font-semibold font-sans">{pendingPaymentsCount} Unpaid pending</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shadow-inner shrink-0">
-                      <DollarSign className="w-5 h-5" />
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Main Full-Width Bookings List */}
-                <div className="w-full space-y-4">
-                  <AppointmentsList
-                    bookings={allBookings}
-                    loading={false}
-                    onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason) => {
-                      const res = await fetch('/api/appointments/update', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                          id, 
-                          action, 
-                          nextScheduleDate, 
-                          newDate: rescheduleDate, 
-                          newTime: rescheduleTime, 
-                          reason: rescheduleReason 
-                        }),
-                      });
-                      if (res.ok) {
-                        const data = await res.json();
-                        triggerToast(`Action "${action}" completed`);
-                        refresh();
-                        return data; // returns { whatsappUrl } if available
-                      }
-                    }}
-                    onRefresh={refresh}
-                    role="doctor"
-                  />
-                </div>
-
-              </div>
-            )}
-
-            {/* QUEUE CONTROLS TAB */}
-            {tab === 'queue' && (
-              <QueueControls todayBookings={bookings} onUpdate={refresh} role="doctor" />
-            )}
-
-            {/* PRE-PAID LOG */}
-            {tab === 'prepaid' && (
-              <div className="bg-white border rounded-2xl shadow-xs overflow-hidden">
-                <div className="p-6 border-b">
-                  <h3 className="font-bold text-lg text-gray-900">Pre-Paid Online Logins</h3>
-                  <p className="text-xs text-gray-500 mt-1 font-semibold">Skip billing queue directly. Generate Prescription directly.</p>
-                </div>
-                
-                <div className="divide-y max-h-[500px] overflow-y-auto">
-                  {allBookings.filter(b => b.paymentStatus === 'paid').length === 0 ? (
-                    <div className="p-12 text-center text-gray-500 font-semibold">No paid records found.</div>
-                  ) : (
-                    allBookings.filter(b => b.paymentStatus === 'paid').map(b => (
-                      <div key={b.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                        <div>
-                          <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase">
-                            Paid ₹{b.amountPaid || 500}
-                          </span>
-                          <h4 className="font-bold text-gray-900 mt-1.5">{b.name}</h4>
-                          <p className="text-xs text-gray-500 font-semibold">{b.phone} • {b.date} at {b.time} for {b.service}</p>
+                  <div className="divide-y max-h-[500px] overflow-y-auto">
+                    {allBookings.filter(b => b.paymentStatus === 'paid').length === 0 ? (
+                      <div className="p-12 text-center text-gray-500 font-semibold">No paid records found.</div>
+                    ) : (
+                      allBookings.filter(b => b.paymentStatus === 'paid').map(b => (
+                        <div key={b.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                          <div>
+                            <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase">
+                              Paid ₹{b.amountPaid || 500}
+                            </span>
+                            <h4 className="font-bold text-gray-900 mt-1.5">{b.name}</h4>
+                            <p className="text-xs text-gray-500 font-semibold">{b.phone} • {b.date} at {b.time} for {b.service}</p>
+                          </div>
+                          <button
+                            onClick={() => window.open(`/admin/prescription?patientId=${b.id}&type=clinic`, '_blank')}
+                            className="px-4 py-2 bg-[#0B1B29] text-white text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 hover:bg-primary transition-colors outline-none"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Write Rx
+                          </button>
                         </div>
-                        <button
-                          onClick={() => window.open(`/admin/prescription?patientId=${b.id}&type=clinic`, '_blank')}
-                          className="px-4 py-2 bg-[#0B1B29] text-white text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 hover:bg-primary transition-colors outline-none"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          Write Rx
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* CLINIC SETTINGS MANAGER */}
-            {tab === 'settings' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-gray-200 pb-4">
-                  <div>
-                    <h2 className="font-playfair text-2xl font-black text-gray-900">Clinic Profile & Operating Details</h2>
-                    <p className="text-xs text-gray-500 font-semibold mt-0.5">Customize clinic identity, consultation fees, and operational capacity. Updates take effect immediately.</p>
+                      ))
+                    )}
                   </div>
+                </div>
+              )}
+
+              {/* CLINIC SETTINGS MANAGER */}
+              {tab === 'settings' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-gray-200 pb-4">
+                    <div>
+                      <h2 className="font-playfair text-2xl font-black text-gray-900">Clinic Profile & Operating Details</h2>
+                      <p className="text-xs text-gray-500 font-semibold mt-0.5">Customize clinic identity, consultation fees, and operational capacity. Updates take effect immediately.</p>
+                    </div>
+                    {settings && (
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => saveSettings(settings)}
+                        className="px-5 py-2.5 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all outline-none cursor-pointer shrink-0"
+                      >
+                        <Save className="w-4 h-4" />
+                        {loading ? 'Saving Changes...' : 'Save Profile Changes'}
+                      </button>
+                    )}
+                  </div>
+
                   {settings && (
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => saveSettings(settings)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all outline-none cursor-pointer shrink-0"
-                    >
-                      <Save className="w-4 h-4" />
-                      {loading ? 'Saving Changes...' : 'Save Profile Changes'}
-                    </button>
-                  )}
-                </div>
+                    <form onSubmit={(e) => { e.preventDefault(); }} className="space-y-6">
 
-                {settings && (
-                  <form onSubmit={(e) => { e.preventDefault(); }} className="space-y-6">
-                    
-                    {/* Card 1: Basic Clinic Identity */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
-                      <div className="flex items-center gap-3 border-b pb-3">
-                        <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-                          <Briefcase className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="font-playfair font-bold text-base text-gray-900">General Clinic Identity</h3>
-                          <p className="text-[10px] text-gray-500 font-semibold">Official name, phone, email, and clinic location</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Clinic Name *</label>
-                          <input 
-                            type="text"
-                            required
-                            value={settings.clinicName}
-                            onChange={(e) => setSettings({ ...settings, clinicName: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                          />
-                        </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Phone Contact *</label>
-                          <input 
-                            type="text"
-                            required
-                            value={settings.clinicPhone}
-                            onChange={(e) => setSettings({ ...settings, clinicPhone: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                          />
-                        </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Email Address *</label>
-                          <input 
-                            type="email"
-                            required
-                            value={settings.clinicEmail}
-                            onChange={(e) => setSettings({ ...settings, clinicEmail: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Physical Clinic Address *</label>
-                        <input 
-                          type="text"
-                          required
-                          value={settings.clinicAddress}
-                          onChange={(e) => setSettings({ ...settings, clinicAddress: e.target.value })}
-                          className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Card 2: Brand Logo Upload Dropzone Card */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                      <div className="flex items-center gap-3 border-b pb-3">
-                        <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-                          <ImageIcon className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Brand Logo</h3>
-                          <p className="text-[10px] text-gray-500 font-semibold">Appears on patient portal header, PDF receipts, and prescription forms</p>
-                        </div>
-                      </div>
-
-                      <div className="p-4 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/60 flex items-center justify-between gap-4 flex-wrap hover:border-primary/50 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden shadow-xs shrink-0">
-                            {settings.clinicLogo ? (
-                              <img src={settings.clinicLogo} alt="Logo" className="w-12 h-12 object-contain" />
-                            ) : (
-                              <ImageIcon className="w-6 h-6 text-gray-400" />
-                            )}
+                      {/* Card 1: Basic Clinic Identity */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 border-b pb-3">
+                          <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                            <Briefcase className="w-5 h-5" />
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-gray-800">Upload High-Res Brand Symbol</p>
-                            <p className="text-[10px] text-gray-500">Supports PNG, SVG, or JPG format (max 5MB)</p>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">General Clinic Identity</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Official name, phone, email, and clinic location</p>
                           </div>
                         </div>
 
-                        <label className="px-4 py-2.5 bg-white border border-gray-250 text-gray-700 hover:bg-gray-50 font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all">
-                          <Upload className="w-4 h-4 text-primary" />
-                          <span>Choose File</span>
-                          <input 
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileUpload(e, (url) => setSettings({ ...settings, clinicLogo: url }))}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Clinic Name *</label>
+                            <input
+                              type="text"
+                              required
+                              value={settings.clinicName}
+                              onChange={(e) => setSettings({ ...settings, clinicName: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                            />
+                          </div>
 
-                    {/* Card 3: Consultation Pricing Fees Cards */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
-                      <div className="flex items-center gap-3 border-b pb-3">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-                          <DollarSign className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="font-playfair font-bold text-base text-gray-900">Consultation Pricing Matrix (INR ₹)</h3>
-                          <p className="text-[10px] text-gray-500 font-semibold">Standard consultation rates auto-applied during booking & payments</p>
-                        </div>
-                      </div>
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Phone Contact *</label>
+                            <input
+                              type="text"
+                              required
+                              value={settings.clinicPhone}
+                              onChange={(e) => setSettings({ ...settings, clinicPhone: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                            />
+                          </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        
-                        <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Clinic Checkup Fee</span>
-                          <div className="relative">
-                            <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                            <input 
-                              type="number"
-                              value={settings.consultationFee}
-                              onChange={(e) => setSettings({ ...settings, consultationFee: Number(e.target.value) })}
-                              className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Email Address *</label>
+                            <input
+                              type="email"
+                              required
+                              value={settings.clinicEmail}
+                              onChange={(e) => setSettings({ ...settings, clinicEmail: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                             />
                           </div>
                         </div>
 
-                        <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Online Video Fee</span>
-                          <div className="relative">
-                            <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                            <input 
-                              type="number"
-                              value={settings.onlineConsultationFee}
-                              onChange={(e) => setSettings({ ...settings, onlineConsultationFee: Number(e.target.value) })}
-                              className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Walk-in Offline Fee</span>
-                          <div className="relative">
-                            <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                            <input 
-                              type="number"
-                              value={settings.offlineConsultationFee}
-                              onChange={(e) => setSettings({ ...settings, offlineConsultationFee: Number(e.target.value) })}
-                              className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Emergency Fee</span>
-                          <div className="relative">
-                            <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                            <input 
-                              type="number"
-                              value={settings.emergencyFee}
-                              onChange={(e) => setSettings({ ...settings, emergencyFee: Number(e.target.value) })}
-                              className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                            />
-                          </div>
-                        </div>
-
-                      </div>
-                    </div>
-
-                    {/* Card 4: Operating Capacity & Session Timings */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
-                      <div className="flex items-center gap-3 border-b pb-3">
-                        <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                          <Clock className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="font-playfair font-bold text-base text-gray-900">Capacity & Session Hours</h3>
-                          <p className="text-[10px] text-gray-500 font-semibold">Set patient intake limits and OPD operational hours</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        
                         <div className="flex flex-col">
-                          <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Max Patients / Hour</label>
-                          <input 
-                            type="number"
-                            value={settings.maxPatientsPerHour}
-                            onChange={(e) => setSettings({ ...settings, maxPatientsPerHour: Number(e.target.value) })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">Physical Clinic Address *</label>
+                          <input
+                            type="text"
+                            required
+                            value={settings.clinicAddress}
+                            onChange={(e) => setSettings({ ...settings, clinicAddress: e.target.value })}
+                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                           />
                         </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Max Daily Bookings</label>
-                          <input 
-                            type="number"
-                            value={settings.maxBookingsPerDay}
-                            onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
-                          />
-                        </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Morning Session Hours</label>
-                          <div className="flex gap-1.5 items-center">
-                            <input 
-                              type="text" 
-                              value={settings.morningStart} 
-                              onChange={(e) => setSettings({ ...settings, morningStart: e.target.value })}
-                              placeholder="09:00"
-                              className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                            />
-                            <span className="text-gray-400 font-bold text-xs">-</span>
-                            <input 
-                              type="text" 
-                              value={settings.morningEnd} 
-                              onChange={(e) => setSettings({ ...settings, morningEnd: e.target.value })}
-                              placeholder="14:00"
-                              className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Evening Session Hours</label>
-                          <div className="flex gap-1.5 items-center">
-                            <input 
-                              type="text" 
-                              value={settings.eveningStart} 
-                              onChange={(e) => setSettings({ ...settings, eveningStart: e.target.value })}
-                              placeholder="17:00"
-                              className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                            />
-                            <span className="text-gray-400 font-bold text-xs">-</span>
-                            <input 
-                              type="text" 
-                              value={settings.eveningEnd} 
-                              onChange={(e) => setSettings({ ...settings, eveningEnd: e.target.value })}
-                              placeholder="21:00"
-                              className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                            />
-                          </div>
-                        </div>
-
                       </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => saveSettings(settings)}
-                      className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-primary hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
-                    >
-                      <Save className="w-4 h-4 text-emerald-300" />
-                      {loading ? 'Saving Profile Changes...' : 'Save Profile Changes'}
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-
-            {/* BOOKING SCHEDULER RULES */}
-            {tab === 'booking-rules' && (
-              <div className="space-y-6">
-                {/* Simple Booking Rules & Settings Header */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
-                  <div>
-                    <h2 className="font-playfair text-2xl font-black text-gray-900 flex items-center gap-2">
-                      <Clock className="w-6 h-6 text-primary" /> Booking Rules & Clinic Timings
-                    </h2>
-                    <p className="text-xs text-gray-500 font-semibold mt-1">
-                      Configure clinic opening hours, consultation time per patient, daily limits, and working days.
-                    </p>
-                  </div>
-                  {settings && (
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => saveSettings(settings)}
-                      className="px-6 py-3 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-md transition-all outline-none cursor-pointer shrink-0"
-                    >
-                      <Save className="w-4 h-4 text-emerald-300" />
-                      Save Booking Rules
-                    </button>
-                  )}
-                </div>
-
-                {settings && (
-                  <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                      
-                      {/* Clinic Timings & Limits Card */}
-                      <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                      {/* Card 2: Brand Logo Upload Dropzone Card */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
                         <div className="flex items-center gap-3 border-b pb-3">
-                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                          <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                            <ImageIcon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Brand Logo</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Appears on patient portal header, PDF receipts, and prescription forms</p>
+                          </div>
+                        </div>
+
+                        <div className="p-4 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/60 flex items-center justify-between gap-4 flex-wrap hover:border-primary/50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden shadow-xs shrink-0">
+                              {settings.clinicLogo ? (
+                                <img src={settings.clinicLogo} alt="Logo" className="w-12 h-12 object-contain" />
+                              ) : (
+                                <ImageIcon className="w-6 h-6 text-gray-400" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-800">Upload High-Res Brand Symbol</p>
+                              <p className="text-[10px] text-gray-500">Supports PNG, SVG, or JPG format (max 5MB)</p>
+                            </div>
+                          </div>
+
+                          <label className="px-4 py-2.5 bg-white border border-gray-250 text-gray-700 hover:bg-gray-50 font-bold text-xs rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all">
+                            <Upload className="w-4 h-4 text-primary" />
+                            <span>Choose File</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleFileUpload(e, (url) => setSettings({ ...settings, clinicLogo: url }))}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Card 3: Consultation Pricing Fees Cards */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 border-b pb-3">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                            <DollarSign className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Consultation Pricing Matrix (INR ₹)</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Standard consultation rates auto-applied during booking & payments</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Clinic Checkup Fee</span>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                              <input
+                                type="number"
+                                value={settings.consultationFee}
+                                onChange={(e) => setSettings({ ...settings, consultationFee: Number(e.target.value) })}
+                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Online Video Fee</span>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                              <input
+                                type="number"
+                                value={settings.onlineConsultationFee}
+                                onChange={(e) => setSettings({ ...settings, onlineConsultationFee: Number(e.target.value) })}
+                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Walk-in Offline Fee</span>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                              <input
+                                type="number"
+                                value={settings.offlineConsultationFee}
+                                onChange={(e) => setSettings({ ...settings, offlineConsultationFee: Number(e.target.value) })}
+                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Emergency Fee</span>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                              <input
+                                type="number"
+                                value={settings.emergencyFee}
+                                onChange={(e) => setSettings({ ...settings, emergencyFee: Number(e.target.value) })}
+                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                              />
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+
+                      {/* Card 4: Operating Capacity & Session Timings */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 border-b pb-3">
+                          <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
                             <Clock className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Timings & Patient Limits</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Set daily patient capacity and consultation time</p>
-                          </div>
-                        </div>
-                        
-                        {/* Consultation Time Per Patient */}
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold text-gray-800 block">
-                            Consultation Time Per Patient
-                          </label>
-                          <div className="grid grid-cols-4 gap-2">
-                            {[15, 20, 30, 45].map((mins) => (
-                              <button
-                                type="button"
-                                key={mins}
-                                onClick={() => setSettings({ ...settings, onlineSlotDuration: mins })}
-                                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                                  settings.onlineSlotDuration === mins
-                                    ? 'bg-primary text-white border-primary shadow-xs'
-                                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                                }`}
-                              >
-                                {mins} Mins
-                              </button>
-                            ))}
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Capacity & Session Hours</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Set patient intake limits and OPD operational hours</p>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                          {/* Max Patients Per Day */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
                           <div className="flex flex-col">
-                            <label className="text-xs font-bold text-gray-800 mb-1.5">Max Patients Per Day</label>
-                            <input 
+                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Max Patients / Hour</label>
+                            <input
                               type="number"
-                              value={settings.onlineMaxDailyBooking}
-                              onChange={(e) => setSettings({ ...settings, onlineMaxDailyBooking: Number(e.target.value) })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
-                              placeholder="e.g. 15 Patients"
+                              value={settings.maxPatientsPerHour}
+                              onChange={(e) => setSettings({ ...settings, maxPatientsPerHour: Number(e.target.value) })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
                             />
                           </div>
-                          
-                          {/* Advance Notice Needed */}
+
                           <div className="flex flex-col">
-                            <label className="text-xs font-bold text-gray-800 mb-1.5">Advance Notice Required</label>
-                            <select
-                              value={settings.bookingBufferHours}
-                              onChange={(e) => setSettings({ ...settings, bookingBufferHours: Number(e.target.value) })}
-                              className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
-                            >
-                              <option value={0}>Same Time Allowed</option>
-                              <option value={2}>2 Hours Advance</option>
-                              <option value={6}>6 Hours Advance</option>
-                              <option value={12}>12 Hours Advance</option>
-                              <option value={24}>24 Hours Advance</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Clinic Opening & Closing Time */}
-                        <div className="pt-2 border-t border-gray-150 space-y-3">
-                          <label className="text-xs font-bold text-gray-800 block">Clinic Opening & Closing Hours</label>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Opening Time</span>
-                              <input 
-                                type="time" 
-                                value={settings.onlineStart || '09:00'} 
-                                onChange={(e) => setSettings({ ...settings, onlineStart: e.target.value })}
-                                className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Closing Time</span>
-                              <input 
-                                type="time" 
-                                value={settings.onlineEnd || '18:00'} 
-                                onChange={(e) => setSettings({ ...settings, onlineEnd: e.target.value })}
-                                className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                      </div>
-
-                      {/* Working Days Card */}
-                      <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
-                        <div className="flex items-center gap-3 border-b pb-3">
-                          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                            <Calendar className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Working Days</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Toggle open & closed days for appointments</p>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2 pt-1">
-                          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
-                            const isOpen = settings.onlineDays?.includes(day);
-                            return (
-                              <label 
-                                key={day} 
-                                className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${
-                                  isOpen 
-                                    ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs' 
-                                    : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-2.5 h-2.5 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-                                  <span className="text-xs font-bold">{day}</span>
-                                </div>
-
-                                <div className="flex items-center gap-3">
-                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                                    isOpen ? 'bg-emerald-200 text-emerald-800' : 'bg-gray-200 text-gray-600'
-                                  }`}>
-                                    {isOpen ? 'Clinic Open' : 'Closed'}
-                                  </span>
-                                  <input 
-                                    type="checkbox"
-                                    checked={isOpen}
-                                    onChange={(e) => {
-                                      const nextDays = e.target.checked 
-                                        ? [...(settings.onlineDays || []), day]
-                                        : (settings.onlineDays || []).filter(d => d !== day);
-                                      setSettings({ ...settings, onlineDays: nextDays });
-                                    }}
-                                    className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
-                                  />
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Automated Messages Card */}
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
-                      <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                            <Sparkles className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Automated Patient Message Templates</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Custom SMS & WhatsApp templates sent automatically to patients</p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {[
-                          { key: 'booked', label: '📩 Booking Confirmation Message' },
-                          { key: 'confirmed', label: '✅ Appointment Approved' },
-                          { key: 'cancelled', label: '❌ Cancellation Notice' },
-                          { key: 'rescheduled', label: '🔄 Rescheduled Date Notice' },
-                          { key: 'reminderBefore', label: '⏰ 1-Hour Before Reminder' },
-                          { key: 'prescriptionReady', label: '📄 Prescription PDF Ready' },
-                        ].map(tmpl => (
-                          <div key={tmpl.key} className="bg-gray-50/60 border border-gray-200 rounded-xl p-4 space-y-2 hover:border-primary/40 transition-colors">
-                            <label className="text-xs font-bold text-gray-800 block">{tmpl.label}</label>
-                            <textarea
-                              rows={3}
-                              value={(settings.emailTemplates as any)?.[tmpl.key] || ''}
-                              onChange={(e) => setSettings({
-                                ...settings,
-                                emailTemplates: { ...(settings.emailTemplates || {} as any), [tmpl.key]: e.target.value }
-                              })}
-                              className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium resize-none outline-none focus:border-primary focus:bg-white bg-white transition-all"
+                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Max Daily Bookings</label>
+                            <input
+                              type="number"
+                              value={settings.maxBookingsPerDay}
+                              onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
                             />
                           </div>
-                        ))}
-                      </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => saveSettings(settings)}
-                      className="w-full py-4 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md outline-none cursor-pointer text-xs uppercase tracking-wider transition-all"
-                    >
-                      <Save className="w-4 h-4 text-emerald-300" />
-                      Save Booking Rules Settings
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Morning Session Hours</label>
+                            <div className="flex gap-1.5 items-center">
+                              <input
+                                type="text"
+                                value={settings.morningStart}
+                                onChange={(e) => setSettings({ ...settings, morningStart: e.target.value })}
+                                placeholder="09:00"
+                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
+                              />
+                              <span className="text-gray-400 font-bold text-xs">-</span>
+                              <input
+                                type="text"
+                                value={settings.morningEnd}
+                                onChange={(e) => setSettings({ ...settings, morningEnd: e.target.value })}
+                                placeholder="14:00"
+                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
+                              />
+                            </div>
+                          </div>
 
-            {/* PREMIUM BLOG CMS */}
-            {tab === 'blogs' && (
-              <div className="bg-white border rounded-2xl p-6 shadow-xs space-y-6">
-                
-                {blogFormMode === 'list' ? (
-                  <div className="space-y-6">
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                      <div>
-                        <h2 className="font-playfair text-xl font-bold text-gray-900">Education Skin Care Journals</h2>
-                        <p className="text-xs text-gray-500 font-semibold mt-0.5">Write and edit educational blogs. Active logs: {blogTotal}.</p>
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Evening Session Hours</label>
+                            <div className="flex gap-1.5 items-center">
+                              <input
+                                type="text"
+                                value={settings.eveningStart}
+                                onChange={(e) => setSettings({ ...settings, eveningStart: e.target.value })}
+                                placeholder="17:00"
+                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
+                              />
+                              <span className="text-gray-400 font-bold text-xs">-</span>
+                              <input
+                                type="text"
+                                value={settings.eveningEnd}
+                                onChange={(e) => setSettings({ ...settings, eveningEnd: e.target.value })}
+                                placeholder="21:00"
+                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
+                              />
+                            </div>
+                          </div>
+
+                        </div>
                       </div>
-                      
+
                       <button
-                        onClick={() => setBlogFormMode('create')}
-                        className="px-4 py-2.5 bg-[#0B1B29] text-white text-xs font-bold uppercase tracking-wider rounded-xl flex items-center gap-1.5 hover:bg-primary transition-colors shrink-0 outline-none"
+                        type="button"
+                        disabled={loading}
+                        onClick={() => saveSettings(settings)}
+                        className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-primary hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
                       >
-                        <PlusCircle className="w-4 h-4" />
-                        Write Blog Post
+                        <Save className="w-4 h-4 text-emerald-300" />
+                        {loading ? 'Saving Profile Changes...' : 'Save Profile Changes'}
                       </button>
-                    </div>
-
-                    {/* Filter and search row */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="relative">
-                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
-                          <Search className="w-4 h-4" />
-                        </span>
-                        <input 
-                          type="text"
-                          placeholder="Search articles..."
-                          value={blogSearch}
-                          onChange={(e) => { setBlogSearch(e.target.value); setBlogPage(1); }}
-                          className="pl-9 pr-4 py-2.5 border rounded-xl w-full text-xs font-semibold outline-none"
-                        />
-                      </div>
-
-                      <select
-                        value={blogCategoryFilter}
-                        onChange={(e) => { setBlogCategoryFilter(e.target.value); setBlogPage(1); }}
-                        className="px-3 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-white"
-                      >
-                        <option value="All">All Categories</option>
-                        <option value="Aesthetic Care">Aesthetic Care</option>
-                        <option value="Hair Restoration">Hair Restoration</option>
-                        <option value="Clinical Dermatology">Clinical Dermatology</option>
-                        <option value="Laser Care">Laser Care</option>
-                      </select>
-
-                      <div className="flex gap-2 justify-end items-center">
-                        <button
-                          disabled={blogPage <= 1}
-                          onClick={() => setBlogPage(prev => Math.max(1, prev - 1))}
-                          className="px-3 py-2 border rounded-lg text-xs font-bold disabled:opacity-40"
-                        >
-                          Prev
-                        </button>
-                        <span className="text-xs font-bold text-gray-500">Page {blogPage}</span>
-                        <button
-                          disabled={blogPage * 10 >= blogTotal}
-                          onClick={() => setBlogPage(prev => prev + 1)}
-                          className="px-3 py-2 border rounded-lg text-xs font-bold disabled:opacity-40"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Blogs listing */}
-                    <div className="border rounded-2xl overflow-hidden divide-y">
-                      {blogs.length === 0 ? (
-                        <div className="p-12 text-center text-gray-500 font-semibold">No publications written yet.</div>
-                      ) : (
-                        blogs.map(post => (
-                          <div key={post.id} className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="w-14 h-14 rounded-lg bg-gray-100 border shrink-0 overflow-hidden relative">
-                                <img src={post.imageUrl || 'https://picsum.photos/seed/skin/150/150'} alt="thumbnail" className="w-full h-full object-cover" />
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="px-2 py-0.5 rounded bg-teal-50 border border-teal-200 text-teal-700 text-[8px] font-bold uppercase">
-                                    {post.category}
-                                  </span>
-                                  <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${
-                                    post.status === 'published' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-gray-100 border border-gray-200 text-gray-500'
-                                  }`}>
-                                    {post.status || 'draft'}
-                                  </span>
-                                  {post.featured && (
-                                    <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 text-[8px] font-bold uppercase">
-                                      ★ Featured
-                                    </span>
-                                  )}
-                                </div>
-                                <h4 className="font-bold text-xs text-gray-900 mt-1 line-clamp-1">{post.title}</h4>
-                                <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Views: {post.views || 0} • Written {new Date(post.createdAt).toLocaleDateString()}</p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button 
-                                onClick={() => initEditBlog(post)}
-                                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                                title="Edit post"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => deleteBlog(post.id)}
-                                className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"
-                                title="Delete post"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                  </div>
-                ) : (
-                  // Create/Edit Blog Form
-                  <form onSubmit={handleBlogSubmit} className="space-y-6">
-                    <div className="flex justify-between items-center border-b border-gray-200 pb-4">
-                      <div>
-                        <h2 className="font-playfair text-2xl font-black text-gray-900">
-                          {blogFormMode === 'create' ? 'Draft Clinical Publication' : 'Edit Blog Journal'}
-                        </h2>
-                        <p className="text-xs text-gray-500 font-semibold mt-0.5">Author educational skin journals for your clinic audience.</p>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setBlogPreviewMode(!blogPreviewMode)}
-                          className="px-4 py-2 bg-gray-100 border text-gray-800 text-xs font-bold uppercase rounded-xl flex items-center gap-1.5 hover:bg-gray-200 outline-none transition-all cursor-pointer"
-                        >
-                          <Eye className="w-4 h-4 text-primary" />
-                          {blogPreviewMode ? 'Back to Editor' : 'Live Preview'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBlogFormMode('list')}
-                          className="px-4 py-2 bg-white border text-gray-500 text-xs font-bold uppercase rounded-xl hover:bg-gray-50 outline-none transition-all cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-
-                    {!blogPreviewMode ? (
-                      <div className="space-y-6">
-                        
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                          
-                          {/* Card 1: Article Metadata */}
-                          <div className="lg:col-span-6 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                            <div className="flex items-center gap-3 border-b pb-3">
-                              <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-                                <BookOpen className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <h3 className="font-playfair font-bold text-base text-gray-900">Journal Overview & Metadata</h3>
-                                <p className="text-[10px] text-gray-500 font-semibold">Title, summary, category, and search tags</p>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Article Title *</label>
-                              <input 
-                                type="text"
-                                required
-                                value={blogForm.title}
-                                onChange={(e) => setBlogForm({ ...blogForm, title: e.target.value })}
-                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-teal-500 outline-none transition-all"
-                                placeholder="e.g. Modern Laser Acne Treatment Guidelines"
-                              />
-                            </div>
-
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Summary (1 Sentence Intro) *</label>
-                              <input 
-                                type="text"
-                                required
-                                value={blogForm.summary}
-                                onChange={(e) => setBlogForm({ ...blogForm, summary: e.target.value })}
-                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-teal-500 outline-none transition-all"
-                                placeholder="e.g. Discover effective clinical skin rejuvenation procedures."
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="flex flex-col">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Category</label>
-                                <select
-                                  value={blogForm.category}
-                                  onChange={(e) => setBlogForm({ ...blogForm, category: e.target.value })}
-                                  className="px-3 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
-                                >
-                                  <option value="Aesthetic Care">Aesthetic Care</option>
-                                  <option value="Hair Restoration">Hair Restoration</option>
-                                  <option value="Clinical Dermatology">Clinical Dermatology</option>
-                                  <option value="Laser Care">Laser Care</option>
-                                </select>
-                              </div>
-
-                              <div className="flex flex-col">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Estimated Reading Time</label>
-                                <input 
-                                  type="text"
-                                  value={blogForm.readTime}
-                                  onChange={(e) => setBlogForm({ ...blogForm, readTime: e.target.value })}
-                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
-                                  placeholder="e.g. 4 min read"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Tags Input */}
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Topic Tags</label>
-                              <div className="flex gap-2">
-                                <input 
-                                  type="text"
-                                  value={tagInput}
-                                  onChange={(e) => setTagInput(e.target.value)}
-                                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                                  placeholder="Type tag & press enter"
-                                  className="px-4 py-2 border rounded-xl text-xs font-semibold flex-1 outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
-                                />
-                                <button type="button" onClick={addTag} className="px-4 bg-gray-100 hover:bg-gray-200 border text-xs font-bold rounded-xl transition-colors cursor-pointer">
-                                  Add
-                                </button>
-                              </div>
-                              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                                {(blogForm.tags || []).map(tag => (
-                                  <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-bold uppercase shadow-2xs">
-                                    {tag}
-                                    <button type="button" onClick={() => removeTag(tag)} className="text-teal-600 font-black hover:text-rose-600">×</button>
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                          </div>
-
-                          {/* Card 2: SEO & Featured Image Settings */}
-                          <div className="lg:col-span-6 space-y-6">
-                            
-                            <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                              <div className="flex items-center gap-3 border-b pb-3">
-                                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                                  <Search className="w-5 h-5" />
-                                </div>
-                                <div>
-                                  <h3 className="font-playfair font-bold text-base text-gray-900">SEO & Featured Media</h3>
-                                  <p className="text-[10px] text-gray-500 font-semibold">Search engine metadata and cover thumbnail</p>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-col">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">SEO Meta Title</label>
-                                <input 
-                                  type="text"
-                                  value={blogForm.seoTitle}
-                                  onChange={(e) => setBlogForm({ ...blogForm, seoTitle: e.target.value })}
-                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                                  placeholder="Recommended: Under 60 characters"
-                                />
-                              </div>
-
-                              <div className="flex flex-col">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">SEO Meta Description</label>
-                                <textarea
-                                  rows={2}
-                                  value={blogForm.seoDescription}
-                                  onChange={(e) => setBlogForm({ ...blogForm, seoDescription: e.target.value })}
-                                  className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                                  placeholder="Recommended: 150-160 characters"
-                                />
-                              </div>
-
-                              <div className="flex flex-col">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Featured Image URL</label>
-                                <input 
-                                  type="text"
-                                  value={blogForm.imageUrl}
-                                  onChange={(e) => setBlogForm({ ...blogForm, imageUrl: e.target.value })}
-                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                                />
-                                <div className="mt-2.5 p-3 border border-dashed rounded-xl bg-gray-50/80 flex items-center justify-between">
-                                  <span className="text-[10px] text-gray-500 font-bold uppercase">Upload New Cover File</span>
-                                  <input 
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) => handleFileUpload(e, (url) => setBlogForm({ ...blogForm, imageUrl: url }))}
-                                    className="text-xs text-gray-500"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Card 3: Publishing Controls Card */}
-                            <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs space-y-3">
-                              <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider">Publishing Controls</h4>
-                              <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input 
-                                    type="checkbox"
-                                    checked={blogForm.featured}
-                                    onChange={(e) => setBlogForm({ ...blogForm, featured: e.target.checked })}
-                                    className="w-4 h-4 accent-amber-500 rounded"
-                                  />
-                                  <span className="text-xs font-bold text-gray-800">Pin as Featured Journal</span>
-                                </label>
-
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-gray-700">Status:</span>
-                                  <select
-                                    value={blogForm.status}
-                                    onChange={(e) => setBlogForm({ ...blogForm, status: e.target.value as any })}
-                                    className="px-3 py-1.5 border rounded-xl text-xs font-bold outline-none bg-white focus:border-primary"
-                                  >
-                                    <option value="draft">Draft (Private)</option>
-                                    <option value="published">Publish (Live)</option>
-                                  </select>
-                                </div>
-                              </div>
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                        {/* Card 4: Rich Markdown Editor Card */}
-                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-3 hover:shadow-md transition-all">
-                          <div className="flex items-center justify-between border-b pb-3">
-                            <label className="text-[10px] font-black text-gray-700 uppercase tracking-widest">
-                              Article Body Content (Markdown Format) *
-                            </label>
-                            <span className="text-[10px] text-gray-400 font-semibold">
-                              Tip: Use ### for section headings and * for bullet points
-                            </span>
-                          </div>
-                          <textarea 
-                            rows={12}
-                            required
-                            value={blogForm.content}
-                            onChange={(e) => setBlogForm({ ...blogForm, content: e.target.value })}
-                            placeholder="Write blog body here. Double line returns create paragraphs. Use ### for subheadings and * for lists."
-                            className="w-full p-4 border rounded-xl text-xs font-mono resize-y outline-none focus:border-teal-500 bg-gray-50/30 focus:bg-white transition-all"
-                          />
-                        </div>
-
-                        <button
-                          type="submit"
-                          className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-teal-600 hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
-                        >
-                          <Save className="w-4 h-4 text-emerald-300" />
-                          {blogFormMode === 'create' ? 'Save & Publish Journal' : 'Apply Journal Updates'}
-                        </button>
-
-                      </div>
-                    ) : (
-                      // Live Preview panel
-                      <div className="space-y-6 p-6 border rounded-2xl bg-[#FCFBF9] max-w-3xl mx-auto shadow-sm">
-                        <span className="px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-bold uppercase tracking-wider">
-                          {blogForm.category}
-                        </span>
-                        <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
-                          {blogForm.title || 'Untitled Post'}
-                        </h1>
-                        <p className="text-xs text-gray-500 font-semibold">
-                          {blogForm.readTime} • {blogForm.status === 'draft' ? 'Draft Mode' : 'Published'}
-                        </p>
-                        
-                        {blogForm.imageUrl && (
-                          <div className="h-64 relative rounded-2xl overflow-hidden border shadow-xs">
-                            <img src={blogForm.imageUrl} alt="banner" className="w-full h-full object-cover" />
-                          </div>
-                        )}
-
-                        <blockquote className="border-l-4 border-accent p-4 bg-gray-50/80 rounded-r-xl italic text-sm font-semibold text-gray-700">
-                          &ldquo;{blogForm.summary || 'Summary block text'}&rdquo;
-                        </blockquote>
-
-                        <div className="text-stone-850 text-sm leading-relaxed space-y-4">
-                          {(blogForm.content || '').split('\n\n').map((para, pIdx) => {
-                            if (para.startsWith('### ')) {
-                              return <h3 key={pIdx} className="font-playfair text-lg font-bold text-gray-900 pt-2">{para.replace('### ', '')}</h3>;
-                            }
-                            if (para.startsWith('* ')) {
-                              return (
-                                <ul key={pIdx} className="list-disc pl-5 space-y-1">
-                                  {para.split('\n').map((li, lIdx) => (
-                                    <li key={lIdx}>{li.replace('* ', '')}</li>
-                                  ))}
-                                </ul>
-                              );
-                            }
-                            return <p key={pIdx} className="whitespace-pre-wrap">{para}</p>;
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                  </form>
-                )}
-
-              </div>
-            )}
-
-            {/* DYNAMIC CMS HOMEPAGE EDITOR */}
-            {tab === 'cms' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-gray-200 pb-4">
-                  <div>
-                    <h2 className="font-playfair text-2xl font-black text-gray-900">Dynamic Homepage CMS Blocks</h2>
-                    <p className="text-xs text-gray-500 font-semibold mt-0.5">Instantly modify hero text, banner alerts, about details, and patient testimonials.</p>
-                  </div>
-                  {cms && (
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => saveCms(cms)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all outline-none cursor-pointer shrink-0"
-                    >
-                      <Save className="w-4 h-4" />
-                      Save CMS Configuration
-                    </button>
+                    </form>
                   )}
                 </div>
+              )}
 
-                {cms && (
-                  <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
-                    
-                    {/* Card 1: Top Banner Section */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                      <div className="flex items-center justify-between border-b pb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                            <Sparkles className="w-5 h-5" />
+              {/* BOOKING SCHEDULER RULES */}
+              {tab === 'booking-rules' && (
+                <div className="space-y-6">
+                  {/* Simple Booking Rules & Settings Header */}
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
+                    <div>
+                      <h2 className="font-playfair text-2xl font-black text-gray-900 flex items-center gap-2">
+                        <Clock className="w-6 h-6 text-primary" /> Booking Rules & Clinic Timings
+                      </h2>
+                      <p className="text-xs text-gray-500 font-semibold mt-1">
+                        Configure clinic opening hours, consultation time per patient, daily limits, and working days.
+                      </p>
+                    </div>
+                    {settings && (
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => saveSettings(settings)}
+                        className="px-6 py-3 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-md transition-all outline-none cursor-pointer shrink-0"
+                      >
+                        <Save className="w-4 h-4 text-emerald-300" />
+                        Save Booking Rules
+                      </button>
+                    )}
+                  </div>
+
+                  {settings && (
+                    <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                        {/* Clinic Timings & Limits Card */}
+                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                          <div className="flex items-center gap-3 border-b pb-3">
+                            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                              <Clock className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Timings & Patient Limits</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Set daily patient capacity and consultation time</p>
+                            </div>
+                          </div>
+
+                          {/* Consultation Time Per Patient */}
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-gray-800 block">
+                              Consultation Time Per Patient
+                            </label>
+                            <div className="grid grid-cols-4 gap-2">
+                              {[15, 20, 30, 45].map((mins) => (
+                                <button
+                                  type="button"
+                                  key={mins}
+                                  onClick={() => setSettings({ ...settings, onlineSlotDuration: mins })}
+                                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${settings.onlineSlotDuration === mins
+                                    ? 'bg-primary text-white border-primary shadow-xs'
+                                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                >
+                                  {mins} Mins
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 pt-2">
+                            {/* Max Patients Per Day */}
+                            <div className="flex flex-col">
+                              <label className="text-xs font-bold text-gray-800 mb-1.5">Max Patients Per Day</label>
+                              <input
+                                type="number"
+                                value={settings.onlineMaxDailyBooking}
+                                onChange={(e) => setSettings({ ...settings, onlineMaxDailyBooking: Number(e.target.value) })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
+                                placeholder="e.g. 15 Patients"
+                              />
+                            </div>
+
+                            {/* Advance Notice Needed */}
+                            <div className="flex flex-col">
+                              <label className="text-xs font-bold text-gray-800 mb-1.5">Advance Notice Required</label>
+                              <select
+                                value={settings.bookingBufferHours}
+                                onChange={(e) => setSettings({ ...settings, bookingBufferHours: Number(e.target.value) })}
+                                className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
+                              >
+                                <option value={0}>Same Time Allowed</option>
+                                <option value={2}>2 Hours Advance</option>
+                                <option value={6}>6 Hours Advance</option>
+                                <option value={12}>12 Hours Advance</option>
+                                <option value={24}>24 Hours Advance</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Clinic Opening & Closing Time */}
+                          <div className="pt-2 border-t border-gray-150 space-y-3">
+                            <label className="text-xs font-bold text-gray-800 block">Clinic Opening & Closing Hours</label>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Opening Time</span>
+                                <input
+                                  type="time"
+                                  value={settings.onlineStart || '09:00'}
+                                  onChange={(e) => setSettings({ ...settings, onlineStart: e.target.value })}
+                                  className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Closing Time</span>
+                                <input
+                                  type="time"
+                                  value={settings.onlineEnd || '18:00'}
+                                  onChange={(e) => setSettings({ ...settings, onlineEnd: e.target.value })}
+                                  className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                        </div>
+
+                        {/* Working Days Card */}
+                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                          <div className="flex items-center gap-3 border-b pb-3">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                              <Calendar className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Working Days</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Toggle open & closed days for appointments</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 pt-1">
+                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                              const isOpen = settings.onlineDays?.includes(day);
+                              return (
+                                <label
+                                  key={day}
+                                  className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${isOpen
+                                    ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                                    : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
+                                    }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={`w-2.5 h-2.5 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                                    <span className="text-xs font-bold">{day}</span>
+                                  </div>
+
+                                  <div className="flex items-center gap-3">
+                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${isOpen ? 'bg-emerald-200 text-emerald-800' : 'bg-gray-200 text-gray-600'
+                                      }`}>
+                                      {isOpen ? 'Clinic Open' : 'Closed'}
+                                    </span>
+                                    <input
+                                      type="checkbox"
+                                      checked={isOpen}
+                                      onChange={(e) => {
+                                        const nextDays = e.target.checked
+                                          ? [...(settings.onlineDays || []), day]
+                                          : (settings.onlineDays || []).filter(d => d !== day);
+                                        setSettings({ ...settings, onlineDays: nextDays });
+                                      }}
+                                      className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                                    />
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Card: Online Booking & Payment Policies */}
+                      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                        <div className="flex items-center gap-3 border-b pb-3">
+                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                            <Settings className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Top Banner Announcement Alert</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Displays ticker banner at top of website</p>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Online Booking & Payment Policies</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Configure prepayment requirements and approval rules for online slots</p>
                           </div>
                         </div>
-                        <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
-                          <span className="text-xs font-bold text-gray-700">Enable Banner</span>
-                          <input 
-                            type="checkbox"
-                            checked={cms.bannerEnabled}
-                            onChange={(e) => setCms({ ...cms, bannerEnabled: e.target.checked })}
-                            className="w-4 h-4 accent-primary rounded"
-                          />
-                        </label>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Toggle 1: Enable Online Booking */}
+                          <label
+                            className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
+                              settings.enableOnlineBooking
+                                ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                                : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold block">Enable Online Bookings</span>
+                              <span className="text-[10px] text-gray-500 font-medium block">Allow patients to schedule slots online</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={!!settings.enableOnlineBooking}
+                              onChange={(e) => setSettings({ ...settings, enableOnlineBooking: e.target.checked })}
+                              className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
+                            />
+                          </label>
+
+                          {/* Toggle 2: Upfront Online Payment */}
+                          <label
+                            className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
+                              settings.onlinePaymentMandatory
+                                ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                                : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold block">Require Upfront Payment</span>
+                              <span className="text-[10px] text-gray-500 font-medium block">Patients must pay online during booking</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={!!settings.onlinePaymentMandatory}
+                              onChange={(e) => setSettings({ ...settings, onlinePaymentMandatory: e.target.checked })}
+                              className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
+                            />
+                          </label>
+
+                          {/* Toggle 3: Requires Approval */}
+                          <label
+                            className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
+                              settings.onlineRequiresApproval
+                                ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                                : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold block">Require Doctor Approval</span>
+                              <span className="text-[10px] text-gray-500 font-medium block">Bookings start as pending approval</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={!!settings.onlineRequiresApproval}
+                              onChange={(e) => setSettings({ ...settings, onlineRequiresApproval: e.target.checked })}
+                              className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
+                            />
+                          </label>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Announcement Text</label>
-                          <input 
-                            type="text"
-                            value={cms.bannerText}
-                            onChange={(e) => setCms({ ...cms, bannerText: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
-                          />
+                      {/* Automated Messages Card */}
+                      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                        <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                              <Sparkles className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Automated Patient Message Templates</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Custom SMS & WhatsApp templates sent automatically to patients</p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Redirect Link</label>
-                          <input 
-                            type="text"
-                            value={cms.bannerLink}
-                            onChange={(e) => setCms({ ...cms, bannerLink: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
-                          />
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {[
+                            { key: 'booked', label: '📩 Booking Confirmation Message' },
+                            { key: 'confirmed', label: '✅ Appointment Approved' },
+                            { key: 'cancelled', label: '❌ Cancellation Notice' },
+                            { key: 'rescheduled', label: '🔄 Rescheduled Date Notice' },
+                            { key: 'reminderBefore', label: '⏰ 1-Hour Before Reminder' },
+                            { key: 'prescriptionReady', label: '📄 Prescription PDF Ready' },
+                          ].map(tmpl => (
+                            <div key={tmpl.key} className="bg-gray-50/60 border border-gray-200 rounded-xl p-4 space-y-2 hover:border-primary/40 transition-colors">
+                              <label className="text-xs font-bold text-gray-800 block">{tmpl.label}</label>
+                              <textarea
+                                rows={3}
+                                value={(settings.emailTemplates as any)?.[tmpl.key] || ''}
+                                onChange={(e) => setSettings({
+                                  ...settings,
+                                  emailTemplates: { ...(settings.emailTemplates || {} as any), [tmpl.key]: e.target.value }
+                                })}
+                                className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium resize-none outline-none focus:border-primary focus:bg-white bg-white transition-all"
+                              />
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </div>
 
-                    {/* Card 2: Homepage Hero Segment */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                      <div className="flex items-center gap-3 border-b pb-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                          <ImageIcon className="w-5 h-5" />
-                        </div>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => saveSettings(settings)}
+                        className="w-full py-4 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md outline-none cursor-pointer text-xs uppercase tracking-wider transition-all"
+                      >
+                        <Save className="w-4 h-4 text-emerald-300" />
+                        Save Booking Rules Settings
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* PREMIUM BLOG CMS */}
+              {tab === 'blogs' && (
+                <div className="bg-white border rounded-2xl p-6 shadow-xs space-y-6">
+
+                  {blogFormMode === 'list' ? (
+                    <div className="space-y-6">
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                         <div>
-                          <h3 className="font-playfair font-bold text-base text-gray-900">Homepage Hero Header Intro</h3>
-                          <p className="text-[10px] text-gray-500 font-semibold">Primary hero text and clinic experience callouts</p>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Main Headline (Line 1)</label>
-                          <input 
-                            type="text"
-                            value={cms.heroTitleLine1}
-                            onChange={(e) => setCms({ ...cms, heroTitleLine1: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Main Headline (Line 2)</label>
-                          <input 
-                            type="text"
-                            value={cms.heroTitleLine2}
-                            onChange={(e) => setCms({ ...cms, heroTitleLine2: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Subtitle</label>
-                        <input 
-                          type="text"
-                          value={cms.heroSubtitle}
-                          onChange={(e) => setCms({ ...cms, heroSubtitle: e.target.value })}
-                          className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                        />
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Description Paragraph</label>
-                        <textarea
-                          rows={3}
-                          value={cms.heroDescription}
-                          onChange={(e) => setCms({ ...cms, heroDescription: e.target.value })}
-                          className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Highlight Badge 1</label>
-                          <input 
-                            type="text"
-                            value={cms.heroBadge1}
-                            onChange={(e) => setCms({ ...cms, heroBadge1: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Highlight Badge 2</label>
-                          <input 
-                            type="text"
-                            value={cms.heroBadge2}
-                            onChange={(e) => setCms({ ...cms, heroBadge2: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Experience Badge</label>
-                          <input 
-                            type="text"
-                            value={cms.heroExperienceBadge}
-                            onChange={(e) => setCms({ ...cms, heroExperienceBadge: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Card 3: About Segment */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                      <div className="flex items-center gap-3 border-b pb-3">
-                        <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                          <FileText className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="font-playfair font-bold text-base text-gray-900">About Clinic Section</h3>
-                          <p className="text-[10px] text-gray-500 font-semibold">Doctor bio and clinical practice philosophy</p>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Title</label>
-                          <input 
-                            type="text"
-                            value={cms.aboutTitle}
-                            onChange={(e) => setCms({ ...cms, aboutTitle: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                          />
-                        </div>
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Subtitle</label>
-                          <input 
-                            type="text"
-                            value={cms.aboutSubtitle}
-                            onChange={(e) => setCms({ ...cms, aboutSubtitle: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col">
-                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Description</label>
-                        <textarea
-                          rows={4}
-                          value={cms.aboutDescription}
-                          onChange={(e) => setCms({ ...cms, aboutDescription: e.target.value })}
-                          className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Card 4: Patient Testimonials Segment */}
-                    <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                      <div className="flex items-center justify-between border-b pb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                            <Users className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Patient Testimonials & Reviews</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Featured clinical feedback on homepage</p>
-                          </div>
+                          <h2 className="font-playfair text-xl font-bold text-gray-900">Education Skin Care Journals</h2>
+                          <p className="text-xs text-gray-500 font-semibold mt-0.5">Write and edit educational blogs. Active logs: {blogTotal}.</p>
                         </div>
 
                         <button
-                          type="button"
-                          onClick={() => {
-                            const name = prompt('Patient Name:');
-                            const role = prompt('Treatment type:');
-                            const text = prompt('Testimonial Text:');
-                            if (name && text) {
-                              setCms({
-                                ...cms,
-                                testimonials: [...cms.testimonials, { name, role: role || 'Patient', text, rating: 5 }]
-                              });
-                            }
-                          }}
-                          className="py-2 px-3.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                          onClick={() => setBlogFormMode('create')}
+                          className="px-4 py-2.5 bg-[#0B1B29] text-white text-xs font-bold uppercase tracking-wider rounded-xl flex items-center gap-1.5 hover:bg-primary transition-colors shrink-0 outline-none"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          Add Review Card
+                          <PlusCircle className="w-4 h-4" />
+                          Write Blog Post
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {cms.testimonials.map((test, idx) => (
-                          <div key={idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 space-y-2 relative hover:bg-white transition-all shadow-2xs">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-black text-gray-900">{test.name} • <span className="text-teal-700 font-semibold">{test.role}</span></span>
+                      {/* Filter and search row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="relative">
+                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                            <Search className="w-4 h-4" />
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Search articles..."
+                            value={blogSearch}
+                            onChange={(e) => { setBlogSearch(e.target.value); setBlogPage(1); }}
+                            className="pl-9 pr-4 py-2.5 border rounded-xl w-full text-xs font-semibold outline-none"
+                          />
+                        </div>
+
+                        <select
+                          value={blogCategoryFilter}
+                          onChange={(e) => { setBlogCategoryFilter(e.target.value); setBlogPage(1); }}
+                          className="px-3 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-white"
+                        >
+                          <option value="All">All Categories</option>
+                          <option value="Aesthetic Care">Aesthetic Care</option>
+                          <option value="Hair Restoration">Hair Restoration</option>
+                          <option value="Clinical Dermatology">Clinical Dermatology</option>
+                          <option value="Laser Care">Laser Care</option>
+                        </select>
+
+                        <div className="flex gap-2 justify-end items-center">
+                          <button
+                            disabled={blogPage <= 1}
+                            onClick={() => setBlogPage(prev => Math.max(1, prev - 1))}
+                            className="px-3 py-2 border rounded-lg text-xs font-bold disabled:opacity-40"
+                          >
+                            Prev
+                          </button>
+                          <span className="text-xs font-bold text-gray-500">Page {blogPage}</span>
+                          <button
+                            disabled={blogPage * 10 >= blogTotal}
+                            onClick={() => setBlogPage(prev => prev + 1)}
+                            className="px-3 py-2 border rounded-lg text-xs font-bold disabled:opacity-40"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Blogs listing */}
+                      <div className="border rounded-2xl overflow-hidden divide-y">
+                        {blogs.length === 0 ? (
+                          <div className="p-12 text-center text-gray-500 font-semibold">No publications written yet.</div>
+                        ) : (
+                          blogs.map(post => (
+                            <div key={post.id} className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className="w-14 h-14 rounded-lg bg-gray-100 border shrink-0 overflow-hidden relative">
+                                  <img src={post.imageUrl || 'https://picsum.photos/seed/skin/150/150'} alt="thumbnail" className="w-full h-full object-cover" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="px-2 py-0.5 rounded bg-teal-50 border border-teal-200 text-teal-700 text-[8px] font-bold uppercase">
+                                      {post.category}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${post.status === 'published' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-gray-100 border border-gray-200 text-gray-500'
+                                      }`}>
+                                      {post.status || 'draft'}
+                                    </span>
+                                    {post.featured && (
+                                      <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 text-[8px] font-bold uppercase">
+                                        ★ Featured
+                                      </span>
+                                    )}
+                                  </div>
+                                  <h4 className="font-bold text-xs text-gray-900 mt-1 line-clamp-1">{post.title}</h4>
+                                  <p className="text-[10px] text-gray-500 font-semibold mt-0.5">Views: {post.views || 0} • Written {new Date(post.createdAt).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => initEditBlog(post)}
+                                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                                  title="Edit post"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => deleteBlog(post.id)}
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"
+                                  title="Delete post"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                    </div>
+                  ) : (
+                    // Create/Edit Blog Form
+                    <form onSubmit={handleBlogSubmit} className="space-y-6">
+                      <div className="flex justify-between items-center border-b border-gray-200 pb-4">
+                        <div>
+                          <h2 className="font-playfair text-2xl font-black text-gray-900">
+                            {blogFormMode === 'create' ? 'Draft Clinical Publication' : 'Edit Blog Journal'}
+                          </h2>
+                          <p className="text-xs text-gray-500 font-semibold mt-0.5">Author educational skin journals for your clinic audience.</p>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setBlogPreviewMode(!blogPreviewMode)}
+                            className="px-4 py-2 bg-gray-100 border text-gray-800 text-xs font-bold uppercase rounded-xl flex items-center gap-1.5 hover:bg-gray-200 outline-none transition-all cursor-pointer"
+                          >
+                            <Eye className="w-4 h-4 text-primary" />
+                            {blogPreviewMode ? 'Back to Editor' : 'Live Preview'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBlogFormMode('list')}
+                            className="px-4 py-2 bg-white border text-gray-500 text-xs font-bold uppercase rounded-xl hover:bg-gray-50 outline-none transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+
+                      {!blogPreviewMode ? (
+                        <div className="space-y-6">
+
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                            {/* Card 1: Article Metadata */}
+                            <div className="lg:col-span-6 bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                              <div className="flex items-center gap-3 border-b pb-3">
+                                <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                                  <BookOpen className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h3 className="font-playfair font-bold text-base text-gray-900">Journal Overview & Metadata</h3>
+                                  <p className="text-[10px] text-gray-500 font-semibold">Title, summary, category, and search tags</p>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Article Title *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={blogForm.title}
+                                  onChange={(e) => setBlogForm({ ...blogForm, title: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-teal-500 outline-none transition-all"
+                                  placeholder="e.g. Modern Laser Acne Treatment Guidelines"
+                                />
+                              </div>
+
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Summary (1 Sentence Intro) *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={blogForm.summary}
+                                  onChange={(e) => setBlogForm({ ...blogForm, summary: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-teal-500 outline-none transition-all"
+                                  placeholder="e.g. Discover effective clinical skin rejuvenation procedures."
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Category</label>
+                                  <select
+                                    value={blogForm.category}
+                                    onChange={(e) => setBlogForm({ ...blogForm, category: e.target.value })}
+                                    className="px-3 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                                  >
+                                    <option value="Aesthetic Care">Aesthetic Care</option>
+                                    <option value="Hair Restoration">Hair Restoration</option>
+                                    <option value="Clinical Dermatology">Clinical Dermatology</option>
+                                    <option value="Laser Care">Laser Care</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex flex-col">
+                                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Estimated Reading Time</label>
+                                  <input
+                                    type="text"
+                                    value={blogForm.readTime}
+                                    onChange={(e) => setBlogForm({ ...blogForm, readTime: e.target.value })}
+                                    className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                                    placeholder="e.g. 4 min read"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Tags Input */}
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Topic Tags</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={tagInput}
+                                    onChange={(e) => setTagInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                                    placeholder="Type tag & press enter"
+                                    className="px-4 py-2 border rounded-xl text-xs font-semibold flex-1 outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                                  />
+                                  <button type="button" onClick={addTag} className="px-4 bg-gray-100 hover:bg-gray-200 border text-xs font-bold rounded-xl transition-colors cursor-pointer">
+                                    Add
+                                  </button>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                                  {(blogForm.tags || []).map(tag => (
+                                    <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-bold uppercase shadow-2xs">
+                                      {tag}
+                                      <button type="button" onClick={() => removeTag(tag)} className="text-teal-600 font-black hover:text-rose-600">×</button>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                            </div>
+
+                            {/* Card 2: SEO & Featured Image Settings */}
+                            <div className="lg:col-span-6 space-y-6">
+
+                              <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                                <div className="flex items-center gap-3 border-b pb-3">
+                                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                                    <Search className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <h3 className="font-playfair font-bold text-base text-gray-900">SEO & Featured Media</h3>
+                                    <p className="text-[10px] text-gray-500 font-semibold">Search engine metadata and cover thumbnail</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col">
+                                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">SEO Meta Title</label>
+                                  <input
+                                    type="text"
+                                    value={blogForm.seoTitle}
+                                    onChange={(e) => setBlogForm({ ...blogForm, seoTitle: e.target.value })}
+                                    className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                                    placeholder="Recommended: Under 60 characters"
+                                  />
+                                </div>
+
+                                <div className="flex flex-col">
+                                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">SEO Meta Description</label>
+                                  <textarea
+                                    rows={2}
+                                    value={blogForm.seoDescription}
+                                    onChange={(e) => setBlogForm({ ...blogForm, seoDescription: e.target.value })}
+                                    className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                                    placeholder="Recommended: 150-160 characters"
+                                  />
+                                </div>
+
+                                <div className="flex flex-col">
+                                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Featured Image URL</label>
+                                  <input
+                                    type="text"
+                                    value={blogForm.imageUrl}
+                                    onChange={(e) => setBlogForm({ ...blogForm, imageUrl: e.target.value })}
+                                    className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                                  />
+                                  <div className="mt-2.5 p-3 border border-dashed rounded-xl bg-gray-50/80 flex items-center justify-between">
+                                    <span className="text-[10px] text-gray-500 font-bold uppercase">Upload New Cover File</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(e) => handleFileUpload(e, (url) => setBlogForm({ ...blogForm, imageUrl: url }))}
+                                      className="text-xs text-gray-500"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Card 3: Publishing Controls Card */}
+                              <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-xs space-y-3">
+                                <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider">Publishing Controls</h4>
+                                <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={blogForm.featured}
+                                      onChange={(e) => setBlogForm({ ...blogForm, featured: e.target.checked })}
+                                      className="w-4 h-4 accent-amber-500 rounded"
+                                    />
+                                    <span className="text-xs font-bold text-gray-800">Pin as Featured Journal</span>
+                                  </label>
+
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-gray-700">Status:</span>
+                                    <select
+                                      value={blogForm.status}
+                                      onChange={(e) => setBlogForm({ ...blogForm, status: e.target.value as any })}
+                                      className="px-3 py-1.5 border rounded-xl text-xs font-bold outline-none bg-white focus:border-primary"
+                                    >
+                                      <option value="draft">Draft (Private)</option>
+                                      <option value="published">Publish (Live)</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                          {/* Card 4: Rich Markdown Editor Card */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-3 hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <label className="text-[10px] font-black text-gray-700 uppercase tracking-widest">
+                                Article Body Content (Markdown Format) *
+                              </label>
+                              <span className="text-[10px] text-gray-400 font-semibold">
+                                Tip: Use ### for section headings and * for bullet points
+                              </span>
+                            </div>
+                            <textarea
+                              rows={12}
+                              required
+                              value={blogForm.content}
+                              onChange={(e) => setBlogForm({ ...blogForm, content: e.target.value })}
+                              placeholder="Write blog body here. Double line returns create paragraphs. Use ### for subheadings and * for lists."
+                              className="w-full p-4 border rounded-xl text-xs font-mono resize-y outline-none focus:border-teal-500 bg-gray-50/30 focus:bg-white transition-all"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-teal-600 hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
+                          >
+                            <Save className="w-4 h-4 text-emerald-300" />
+                            {blogFormMode === 'create' ? 'Save & Publish Journal' : 'Apply Journal Updates'}
+                          </button>
+
+                        </div>
+                      ) : (
+                        // Live Preview panel
+                        <div className="space-y-6 p-6 border rounded-2xl bg-[#FCFBF9] max-w-3xl mx-auto shadow-sm">
+                          <span className="px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-bold uppercase tracking-wider">
+                            {blogForm.category}
+                          </span>
+                          <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
+                            {blogForm.title || 'Untitled Post'}
+                          </h1>
+                          <p className="text-xs text-gray-500 font-semibold">
+                            {blogForm.readTime} • {blogForm.status === 'draft' ? 'Draft Mode' : 'Published'}
+                          </p>
+
+                          {blogForm.imageUrl && (
+                            <div className="h-64 relative rounded-2xl overflow-hidden border shadow-xs">
+                              <img src={blogForm.imageUrl} alt="banner" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+
+                          <blockquote className="border-l-4 border-accent p-4 bg-gray-50/80 rounded-r-xl italic text-sm font-semibold text-gray-700">
+                            &ldquo;{blogForm.summary || 'Summary block text'}&rdquo;
+                          </blockquote>
+
+                          <div className="text-stone-850 text-sm leading-relaxed space-y-4">
+                            {(blogForm.content || '').split('\n\n').map((para, pIdx) => {
+                              if (para.startsWith('### ')) {
+                                return <h3 key={pIdx} className="font-playfair text-lg font-bold text-gray-900 pt-2">{para.replace('### ', '')}</h3>;
+                              }
+                              if (para.startsWith('* ')) {
+                                return (
+                                  <ul key={pIdx} className="list-disc pl-5 space-y-1">
+                                    {para.split('\n').map((li, lIdx) => (
+                                      <li key={lIdx}>{li.replace('* ', '')}</li>
+                                    ))}
+                                  </ul>
+                                );
+                              }
+                              return <p key={pIdx} className="whitespace-pre-wrap">{para}</p>;
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                    </form>
+                  )}
+
+                </div>
+              )}
+
+              {/* DYNAMIC CMS HOMEPAGE EDITOR */}
+              {tab === 'cms' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-gray-200 pb-4">
+                    <div>
+                      <h2 className="font-playfair text-2xl font-black text-gray-900">Dynamic Homepage CMS Blocks</h2>
+                      <p className="text-xs text-gray-500 font-semibold mt-0.5">Instantly modify hero text, banner alerts, about details, and patient testimonials.</p>
+                    </div>
+                    {cms && (
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => saveCms(cms)}
+                        className="px-5 py-2.5 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all outline-none cursor-pointer shrink-0"
+                      >
+                        <Save className="w-4 h-4" />
+                        Save CMS Configuration
+                      </button>
+                    )}
+                  </div>
+
+                  {cms && (
+                    <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+
+                      {/* Card 1: Top Banner Section */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between border-b pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                              <Sparkles className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Top Banner Announcement Alert</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Displays ticker banner at top of website</p>
+                            </div>
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
+                            <span className="text-xs font-bold text-gray-700">Enable Banner</span>
+                            <input
+                              type="checkbox"
+                              checked={cms.bannerEnabled}
+                              onChange={(e) => setCms({ ...cms, bannerEnabled: e.target.checked })}
+                              className="w-4 h-4 accent-primary rounded"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Announcement Text</label>
+                            <input
+                              type="text"
+                              value={cms.bannerText}
+                              onChange={(e) => setCms({ ...cms, bannerText: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Redirect Link</label>
+                            <input
+                              type="text"
+                              value={cms.bannerLink}
+                              onChange={(e) => setCms({ ...cms, bannerLink: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card 2: Homepage Hero Segment */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 border-b pb-3">
+                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                            <ImageIcon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">Homepage Hero Header Intro</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Primary hero text and clinic experience callouts</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Main Headline (Line 1)</label>
+                            <input
+                              type="text"
+                              value={cms.heroTitleLine1}
+                              onChange={(e) => setCms({ ...cms, heroTitleLine1: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Main Headline (Line 2)</label>
+                            <input
+                              type="text"
+                              value={cms.heroTitleLine2}
+                              onChange={(e) => setCms({ ...cms, heroTitleLine2: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col">
+                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Subtitle</label>
+                          <input
+                            type="text"
+                            value={cms.heroSubtitle}
+                            onChange={(e) => setCms({ ...cms, heroSubtitle: e.target.value })}
+                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div className="flex flex-col">
+                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Description Paragraph</label>
+                          <textarea
+                            rows={3}
+                            value={cms.heroDescription}
+                            onChange={(e) => setCms({ ...cms, heroDescription: e.target.value })}
+                            className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Highlight Badge 1</label>
+                            <input
+                              type="text"
+                              value={cms.heroBadge1}
+                              onChange={(e) => setCms({ ...cms, heroBadge1: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Highlight Badge 2</label>
+                            <input
+                              type="text"
+                              value={cms.heroBadge2}
+                              onChange={(e) => setCms({ ...cms, heroBadge2: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Experience Badge</label>
+                            <input
+                              type="text"
+                              value={cms.heroExperienceBadge}
+                              onChange={(e) => setCms({ ...cms, heroExperienceBadge: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card 3: About Segment */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 border-b pb-3">
+                          <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="font-playfair font-bold text-base text-gray-900">About Clinic Section</h3>
+                            <p className="text-[10px] text-gray-500 font-semibold">Doctor bio and clinical practice philosophy</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Title</label>
+                            <input
+                              type="text"
+                              value={cms.aboutTitle}
+                              onChange={(e) => setCms({ ...cms, aboutTitle: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Subtitle</label>
+                            <input
+                              type="text"
+                              value={cms.aboutSubtitle}
+                              onChange={(e) => setCms({ ...cms, aboutSubtitle: e.target.value })}
+                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col">
+                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Description</label>
+                          <textarea
+                            rows={4}
+                            value={cms.aboutDescription}
+                            onChange={(e) => setCms({ ...cms, aboutDescription: e.target.value })}
+                            className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Card 3.5: Treatments & Clinical Services CRUD Segment */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between border-b pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                              <Briefcase className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Clinical Services & Treatments</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Manage all dynamic treatments displayed on the website</p>
+                            </div>
+                          </div>
+
+                          {serviceFormMode === 'list' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setServiceForm({ name: '', description: '', price: '' });
+                                setServiceFormMode('create');
+                              }}
+                              className="py-2 px-3.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add New Treatment
+                            </button>
+                          )}
+                        </div>
+
+                        {serviceFormMode === 'list' ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {cms.services && cms.services.length > 0 ? (
+                              cms.services.map((serv, idx) => (
+                                <div key={serv.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 flex items-start justify-between gap-3 hover:bg-white transition-all shadow-2xs">
+                                  <div className="space-y-0.5 text-left">
+                                    <p className="text-xs font-black text-gray-900 leading-tight">{serv.name}</p>
+                                    <p className="text-[10px] font-bold text-teal-600">{formatPrice(serv.price)}</p>
+                                    <p className="text-[10px] text-gray-500 font-semibold line-clamp-2 leading-relaxed">{serv.description}</p>
+                                  </div>
+                                  <div className="flex flex-col gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setServiceForm({
+                                          name: serv.name,
+                                          description: serv.description,
+                                          price: serv.price,
+                                        });
+                                        setActiveServiceIdx(idx);
+                                        setServiceFormMode('edit');
+                                      }}
+                                      className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                      title="Edit Treatment"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteService(idx)}
+                                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                      title="Delete Treatment"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No treatments defined yet.</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-4 border border-teal-150 rounded-2xl bg-teal-50/15 space-y-4 text-left">
+                            <h4 className="font-playfair font-bold text-xs text-teal-800 uppercase tracking-widest">
+                              {serviceFormMode === 'create' ? 'Create New Treatment' : 'Edit Treatment Details'}
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Treatment Name</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Acne & Scar Treatment"
+                                  value={serviceForm.name}
+                                  onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
+                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-teal-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Price Indicator / Fee</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. From ₹800/session"
+                                  value={serviceForm.price}
+                                  onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
+                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-teal-500"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col">
+                              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Detailed Description</label>
+                              <textarea
+                                rows={3}
+                                placeholder="Describe the treatment benefits, process, sessions, etc."
+                                value={serviceForm.description}
+                                onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
+                                className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-white focus:border-teal-500"
+                              />
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2">
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const list = cms.testimonials.filter((_, i) => i !== idx);
-                                  setCms({ ...cms, testimonials: list });
+                                  setServiceFormMode('list');
+                                  setActiveServiceIdx(null);
                                 }}
-                                className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                title="Delete Testimonial"
+                                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveService}
+                                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                                {serviceFormMode === 'create' ? 'Add Treatment' : 'Save Changes'}
                               </button>
                             </div>
-                            <p className="text-[11px] text-gray-600 font-semibold italic leading-relaxed">&ldquo;{test.text}&rdquo;</p>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => saveCms(cms)}
-                      className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-primary hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
-                    >
-                      <Save className="w-4 h-4 text-emerald-300" />
-                      Save Live CMS Configuration
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
+                      {/* Card 3.6: Doctor Certificates CRUD Segment */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between border-b pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                              <Award className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Doctor Certificates & Credentials</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Manage board certifications and medical degree credentials</p>
+                            </div>
+                          </div>
 
-            {/* ONLINE CONSULTATIONS BOARD */}
-            {tab === 'telemedicine' && (
-              <div className="w-full space-y-4">
-                <DoctorTelemedicineView initialStage={telemedicineStage} onStageChange={setTelemedicineStage} />
-              </div>
-            )}
+                          {certFormMode === 'list' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCertForm({ title: '', institution: '', image: '' });
+                                setCertFormMode('create');
+                              }}
+                              className="py-2 px-3.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add New Certificate
+                            </button>
+                          )}
+                        </div>
 
-          </motion.div>
-        </AnimatePresence>
+                        {certFormMode === 'list' ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {cms.certificates && cms.certificates.length > 0 ? (
+                              cms.certificates.map((cert, idx) => (
+                                <div key={cert.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 flex items-start justify-between gap-3 hover:bg-white transition-all shadow-2xs">
+                                  <div className="flex items-start gap-3 text-left">
+                                    <div className="w-14 h-14 bg-gray-100 border rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                      <img src={cert.image} alt={cert.title} className="w-full h-full object-contain" />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <p className="text-xs font-black text-gray-900 leading-tight">{cert.title}</p>
+                                      <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">{cert.institution}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCertForm({
+                                          title: cert.title,
+                                          institution: cert.institution,
+                                          image: cert.image,
+                                        });
+                                        setActiveCertIdx(idx);
+                                        setCertFormMode('edit');
+                                      }}
+                                      className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                      title="Edit Certificate"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteCertificate(idx)}
+                                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                      title="Delete Certificate"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No certificates configured yet. Default certificates will be shown on the public site.</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-4 border border-indigo-150 rounded-2xl bg-indigo-50/15 space-y-4 text-left">
+                            <h4 className="font-playfair font-bold text-xs text-indigo-800 uppercase tracking-widest">
+                              {certFormMode === 'create' ? 'Add New Certificate' : 'Edit Certificate Details'}
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Certificate Title</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Board Certified in Dermatology"
+                                  value={certForm.title}
+                                  onChange={(e) => setCertForm({ ...certForm, title: e.target.value })}
+                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Issuing Institution</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. IADVL"
+                                  value={certForm.institution}
+                                  onChange={(e) => setCertForm({ ...certForm, institution: e.target.value })}
+                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                />
+                              </div>
+                            </div>
 
-      </main>
+                            <div className="flex flex-col">
+                              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Certificate Image</label>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                                <div className="sm:col-span-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Image URL or Path (e.g. /assets/cert1.png)"
+                                    value={certForm.image}
+                                    onChange={(e) => setCertForm({ ...certForm, image: e.target.value })}
+                                    className="w-full px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                  />
+                                  <div className="mt-2.5 p-3 border border-dashed rounded-xl bg-white flex items-center justify-between">
+                                    <span className="text-[9px] text-gray-500 font-bold uppercase">Upload Certificate File</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(e) => handleFileUpload(e, (url) => setCertForm({ ...certForm, image: url }))}
+                                      className="text-xs text-gray-500 cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex justify-center sm:justify-start">
+                                  {certForm.image ? (
+                                    <div className="relative w-24 h-24 border rounded-xl overflow-hidden bg-gray-50 flex items-center justify-center shadow-inner">
+                                      <img src={certForm.image} alt="Preview" className="max-w-full max-h-full object-contain" />
+                                      <button
+                                        type="button"
+                                        onClick={() => setCertForm({ ...certForm, image: '' })}
+                                        className="absolute top-1 right-1 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center hover:bg-rose-600 shadow-sm transition-colors"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="w-24 h-24 border-2 border-dashed rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 font-bold text-[9px] uppercase tracking-wider text-center p-2">
+                                      No Image Uploaded
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCertFormMode('list');
+                                  setActiveCertIdx(null);
+                                }}
+                                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveCertificate}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                                {certFormMode === 'create' ? 'Add Certificate' : 'Save Changes'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card 4: Patient Testimonials Segment */}
+                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between border-b pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                              <Users className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Patient Testimonials & Reviews</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Featured clinical feedback on homepage</p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const name = prompt('Patient Name:');
+                              const role = prompt('Treatment type:');
+                              const text = prompt('Testimonial Text:');
+                              if (name && text) {
+                                setCms({
+                                  ...cms,
+                                  testimonials: [...cms.testimonials, { name, role: role || 'Patient', text, rating: 5 }]
+                                });
+                              }
+                            }}
+                            className="py-2 px-3.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Review Card
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {cms.testimonials.map((test, idx) => (
+                            <div key={idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 space-y-2 relative hover:bg-white transition-all shadow-2xs">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-black text-gray-900">{test.name} • <span className="text-teal-700 font-semibold">{test.role}</span></span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const list = cms.testimonials.filter((_, i) => i !== idx);
+                                    setCms({ ...cms, testimonials: list });
+                                  }}
+                                  className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Delete Testimonial"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-gray-600 font-semibold italic leading-relaxed">&ldquo;{test.text}&rdquo;</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => saveCms(cms)}
+                        className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-primary hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
+                      >
+                        <Save className="w-4 h-4 text-emerald-300" />
+                        Save Live CMS Configuration
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* ONLINE CONSULTATIONS BOARD */}
+              {tab === 'telemedicine' && (
+                <div className="w-full space-y-4">
+                  <DoctorTelemedicineView initialStage={telemedicineStage} onStageChange={setTelemedicineStage} />
+                </div>
+              )}
+
+            </motion.div>
+          </AnimatePresence>
+
+        </main>
       </div>
 
       {/* Mobile Drawer Notification Tray */}
       <AnimatePresence>
         {notifTrayOpen && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}
               onClick={() => setNotifTrayOpen(false)}
               className="fixed inset-0 bg-black z-40"
             />
-            
+
             {/* Sliding Drawer Pane */}
-            <motion.div 
+            <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
@@ -2297,7 +2920,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               className="fixed top-0 bottom-0 right-0 w-80 bg-white z-50 p-6 flex flex-col justify-between shadow-2xl border-l select-text"
             >
               <div className="flex-1 flex flex-col min-h-0">
-                
+
                 {/* Header */}
                 <div className="flex justify-between items-center pb-4 border-b">
                   <div className="flex items-center gap-2">
@@ -2315,16 +2938,15 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     <div className="text-center py-12 text-gray-400 font-bold text-xs">No alerts received.</div>
                   ) : (
                     notifications.map(notif => (
-                      <div 
-                        key={notif.id} 
-                        className={`p-3 border rounded-xl text-xs space-y-1 relative transition-all ${
-                          notif.read ? 'bg-white text-gray-500' : 'bg-primary/5 text-gray-800 border-primary/20 shadow-xs'
-                        }`}
+                      <div
+                        key={notif.id}
+                        className={`p-3 border rounded-xl text-xs space-y-1 relative transition-all ${notif.read ? 'bg-white text-gray-500' : 'bg-primary/5 text-gray-800 border-primary/20 shadow-xs'
+                          }`}
                       >
                         <div className="flex justify-between items-start gap-1">
                           <span className="font-bold leading-tight">{notif.title}</span>
                           {!notif.read && (
-                            <button 
+                            <button
                               onClick={() => markNotifRead(notif.id)}
                               className="text-[9px] font-bold text-primary hover:underline shrink-0"
                             >
@@ -2375,9 +2997,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all ${
-                tab === t.id ? 'text-white' : 'text-white/40'
-              }`}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all ${tab === t.id ? 'text-white' : 'text-white/40'
+                }`}
             >
               <span className={`text-base ${tab === t.id ? 'scale-110' : ''} transition-transform`}>
                 {t.emoji}

@@ -43,7 +43,7 @@ export default function StaffDashboard({ onLogout }: StaffDashboardProps) {
 
   const triggerToast = (text: string) => {
     setMsg(text);
-    setTimeout(() => setMsg(''), 4000);
+    setTimeout(() => setMsg(''), 12000); // 12 seconds to give staff enough time to read
   };
 
   const playPing = () => {

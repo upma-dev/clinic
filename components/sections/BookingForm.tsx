@@ -56,6 +56,7 @@ export default function BookingForm() {
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [servicesList, setServicesList] = useState<any[]>([]);
   const [onlineFee, setOnlineFee] = useState(200);
+  const [offlineFee, setOfflineFee] = useState(200);
 
   useEffect(() => {
     Promise.all([
@@ -65,6 +66,7 @@ export default function BookingForm() {
       if (settingsData) {
         setSettings(settingsData);
         setOnlineFee(settingsData.onlineConsultationFee || settingsData.consultationFee || 200);
+        setOfflineFee(settingsData.offlineConsultationFee || settingsData.consultationFee || 200);
       }
       const svcs = cmsData?.services || siteConfig.services;
       setServicesList(svcs);
@@ -407,7 +409,7 @@ export default function BookingForm() {
 
   if (settings && !settings.enableOnlineBooking) {
     return (
-      <section id="bookings" className="py-20 bg-white select-text">
+      <section id="bookings" className="py-12 sm:py-16 bg-white select-text">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
           <div className="w-16 h-16 rounded-full bg-rose-50 border border-rose-300 flex items-center justify-center mx-auto text-rose-700">
             <AlertCircle className="w-8 h-8" />
@@ -425,7 +427,7 @@ export default function BookingForm() {
   const cutoffTime = settings ? `${settings.bookingCutoffHour}:${String(settings.bookingCutoffMinute || 0).padStart(2, '0')}` : '07:30 PM';
 
   return (
-    <section id="bookings" className="py-20 bg-white select-text">
+    <section id="bookings" className="py-12 sm:py-16 bg-white select-text">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
 
         {/* Mock Payment Simulation Modal Overlay */}
@@ -774,7 +776,10 @@ export default function BookingForm() {
                 <div className="p-4 bg-[#1B4F72]/5 border border-[#1B4F72]/20 rounded-xl flex items-start gap-2.5">
                   <CreditCard className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <p className="text-[10px] font-bold text-gray-800 uppercase tracking-wider leading-relaxed">
-                    Online consultation fee is ₹{onlineFee}. No payment is required right now. The clinic will review your request and send a payment link via WhatsApp.
+                    {settings?.onlinePaymentMandatory
+                      ? `Online consultation fee is ₹${onlineFee}. Prepayment is required to complete and confirm your booking.`
+                      : `Online consultation fee is ₹${onlineFee}. No payment is required right now. The clinic will review your request and send a payment link via WhatsApp.`
+                    }
                   </p>
                 </div>
               )}
@@ -784,7 +789,7 @@ export default function BookingForm() {
                 <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-2.5">
                   <ShieldAlert className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
                   <p className="text-[10px] font-bold text-teal-850 uppercase tracking-wider leading-relaxed">
-                    OPD Visit Booked immediately. No prepayment required. Please verify details with clinic desk on arrival at clinic. Consultation fees is ₹{onlineFee}.
+                    OPD Visit Booked immediately. No prepayment required. Please verify details with clinic desk on arrival at clinic. Consultation fees is ₹{offlineFee}.
                   </p>
                 </div>
               )}

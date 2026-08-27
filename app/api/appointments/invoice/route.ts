@@ -30,7 +30,11 @@ export async function GET(req: NextRequest) {
 
     const payStatus = booking.paymentStatus || 'Pending';
     const bookStatus = booking.status || 'Pending';
-    const amt = booking.amountPaid || settings.offlineConsultationFee || settings.consultationFee || 600;
+    const amt = booking.amountPaid || (
+      booking.bookingType === 'online'
+        ? (settings.onlineConsultationFee || settings.consultationFee || 600)
+        : (settings.offlineConsultationFee || settings.consultationFee || 700)
+    );
     const orderId = booking.razorpayOrderId || 'N/A';
     const paymentId = booking.razorpayPaymentId || 'N/A';
     const paidAtStr = booking.paidAt ? new Date(booking.paidAt).toLocaleString() : 'N/A';

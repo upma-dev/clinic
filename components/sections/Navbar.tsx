@@ -10,10 +10,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Calendar, Phone, Bot, Pin, ChevronDown } from 'lucide-react';
+import { Menu, X, Calendar, Phone, Bot, Pin, ChevronDown, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { siteConfig } from '@/config/site';
 import type { ClinicSettings, CMSContent } from '@/lib/types';
+import { formatHHMM, getAreaFromAddress } from '@/lib/slots';
 
 type NavLink = {
   name: string;
@@ -26,7 +27,10 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
   const phone = settings?.clinicPhone || siteConfig.phone;
   const whatsapp = settings?.clinicPhone?.replace(/[^0-9]/g, '') || siteConfig.whatsapp;
   const logoUrl = settings?.clinicLogo || '/assets/logo.png';
-  const timingsText = settings ? `${settings.morningStart} AM - ${settings.morningEnd} PM | ${settings.eveningStart} PM - ${settings.eveningEnd} PM` : '09:00 AM - 08:30 PM (Daily)';
+  const timingsText = settings 
+    ? `${formatHHMM(settings.morningStart)} - ${formatHHMM(settings.morningEnd)} | ${formatHHMM(settings.eveningStart)} - ${formatHHMM(settings.eveningEnd)}` 
+    : '09:00 AM - 08:30 PM (Daily)';
+  const areaName = getAreaFromAddress(settings?.clinicAddress || siteConfig.location);
   const [isOpen, setIsOpen] = useState(false);
   const [openMobileMenus, setOpenMobileMenus] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
@@ -104,16 +108,12 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
             </span>
             <span className="px-3 border-l border-teal-800 flex items-center">
               <Pin className="w-3 h-3 mr-2" />
-              Rishi Nagar Clinic: {timingsText}
+              {areaName} Clinic: {timingsText}
             </span>
           </div>
           <div className="flex items-center space-x-6 text-gray-300">
-            <a href={`tel:${whatsapp}`} className="hover:text-white transition-colors flex items-center group">
-              <Phone className="w-3 h-3 mr-1.5 text-teal-500 group-hover:scale-110" />
-              +91 {whatsapp}
-            </a>
             <span className="flex items-center">
-               <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mr-2" />
+               <MapPin className="w-3 h-3 mr-1.5 text-teal-400" />
                UJJAIN, MP
             </span>
           </div>

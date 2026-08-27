@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     let fee = settings.offlineConsultationFee || settings.consultationFee || 200;
     if (receipt) {
       if (receipt.startsWith('walkin_temp_')) {
-        fee = 600;
+        fee = settings.offlineConsultationFee || settings.consultationFee || 700;
       } else {
         const db = await getDb();
         const booking = await db.collection(COLLECTIONS.bookings).findOne({ id: receipt });
