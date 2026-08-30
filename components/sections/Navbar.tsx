@@ -7,7 +7,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X, Calendar, Phone, Bot, Pin, ChevronDown, MapPin } from 'lucide-react';
@@ -34,6 +34,22 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
   const [isOpen, setIsOpen] = useState(false);
   const [openMobileMenus, setOpenMobileMenus] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
+
+  const [localCms, setLocalCms] = useState<CMSContent | null>(cms || null);
+
+  useEffect(() => {
+    if (cms) {
+      setLocalCms(cms);
+    } else {
+      fetch('/api/cms')
+        .then((res) => {
+          if (res.ok) return res.json();
+          throw new Error('failed to load');
+        })
+        .then((data) => setLocalCms(data))
+        .catch(() => {});
+    }
+  }, [cms]);
 
   // Scrollspy for in-page sections on routes like /gallery
   const [activeSection, setActiveSection] = useState<string | null>(null);
@@ -97,6 +113,14 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
 
   return (
     <nav id="site-header-nav" className="fixed top-0 left-0 w-full z-50">
+      {/* Dynamic top banner alert */}
+      {localCms?.bannerEnabled && localCms?.bannerText && (
+        <div className="bg-gradient-to-r from-primary to-accent text-white py-2 px-4 text-center text-[10px] sm:text-xs font-bold font-sans tracking-wide z-50 relative animate-pulse animate-duration-3000">
+          <a href={localCms.bannerLink || '/booking'} className="hover:underline transition-all block">
+            {localCms.bannerText}
+          </a>
+        </div>
+      )}
       
       {/* Top Info Bar */}
       <div className="bg-[#0B1B29] text-teal-400 py-1.5 px-4 hidden md:flex items-center justify-between text-[11px] font-sans font-bold tracking-wide">

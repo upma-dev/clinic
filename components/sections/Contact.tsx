@@ -10,7 +10,7 @@ import React from 'react';
 import { MapPin, Phone, Mail, Clock, ShieldAlert } from 'lucide-react';
 import { siteConfig } from '@/config/site';
 import type { ClinicSettings, CMSContent } from '@/lib/types';
-import { formatHHMM } from '@/lib/slots';
+import { formatHHMM, getClosedDaysString } from '@/lib/slots';
 
 interface ContactProps {
   settings?: ClinicSettings | null;
@@ -22,8 +22,15 @@ export default function Contact({ settings, cms }: ContactProps) {
   const phone = settings?.clinicPhone || siteConfig.phone;
   const whatsapp = settings?.clinicPhone?.replace(/[^0-9]/g, '') || siteConfig.whatsapp;
   const email = settings?.clinicEmail || cms?.contactEmail || siteConfig.email;
+  const allowedDays = settings?.availableDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const closedDays = daysOfWeek.filter(d => !allowedDays.includes(d));
+
+  const closedDaysStr = settings 
+    ? getClosedDaysString(settings.availableDays)
+    : 'Sunday Closed';
   const timings = settings 
-    ? `${formatHHMM(settings.morningStart)} - ${formatHHMM(settings.morningEnd)} | ${formatHHMM(settings.eveningStart)} - ${formatHHMM(settings.eveningEnd)} (Sunday Closed)` 
+    ? `${formatHHMM(settings.morningStart)} - ${formatHHMM(settings.morningEnd)} | ${formatHHMM(settings.eveningStart)} - ${formatHHMM(settings.eveningEnd)} (${closedDaysStr})` 
     : siteConfig.timings;
   const googleMapsEmbed = (cms?.googleMapsEmbed && !cms.googleMapsEmbed.includes('embed?pb='))
     ? cms.googleMapsEmbed
@@ -126,7 +133,7 @@ export default function Contact({ settings, cms }: ContactProps) {
             <div className="p-4 bg-[#F8F6F2] rounded-xl border border-gray-300 mt-6 text-left flex items-start space-x-2.5">
               <ShieldAlert className="w-5 h-5 text-accent shrink-0 mt-0.5" />
               <p className="font-sans text-[11px] text-gray-800 leading-normal font-semibold">
-                ⚠️ <strong>Sunday Closed:</strong> Physical OPD hours are closed on Sundays. Online dynamic appointment pre-registrations for the weekly slot are open 24x7.
+                ⚠️ <strong>{closedDays.length > 0 ? `${closedDays.join(', ')} Closed:` : 'Open 7 Days:'}</strong> Physical OPD hours are {closedDays.length > 0 ? `closed on ${closedDays.join(' and ')}s` : 'open every day'}. Online dynamic appointment pre-registrations for the weekly slot are open 24x7.
               </p>
             </div>
 

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import React from 'react';
 import BlogDetailClient from '@/components/patient/BlogDetailClient';
 import { getClinicSettings } from '@/lib/db/settings';

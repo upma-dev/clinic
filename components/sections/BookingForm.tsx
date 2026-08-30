@@ -32,6 +32,8 @@ export default function BookingForm() {
   const [slots, setSlots] = useState<SlotAvailability[]>([]);
   const [fullyBooked, setFullyBooked] = useState(false);
   const [bookingClosed, setBookingClosed] = useState(false);
+  const [isClosedDay, setIsClosedDay] = useState(false);
+  const [isHoliday, setIsHoliday] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   // Payment checkout overlay modal
@@ -79,6 +81,10 @@ export default function BookingForm() {
   const fetchSlots = () => {
     if (!date) {
       setSlots([]);
+      setFullyBooked(false);
+      setBookingClosed(false);
+      setIsClosedDay(false);
+      setIsHoliday(false);
       return;
     }
 
@@ -92,6 +98,8 @@ export default function BookingForm() {
           setSlots(data.slots);
           setFullyBooked(data.fullyBooked);
           setBookingClosed(data.bookingClosed);
+          setIsClosedDay(!!data.isClosedDay);
+          setIsHoliday(!!data.isHoliday);
           const firstAvailable = data.slots.find(
             (s: SlotAvailability) => s.status === 'available'
           );
@@ -426,6 +434,19 @@ export default function BookingForm() {
   const slotDuration = settings?.onlineSlotDuration || settings?.slotDurationMinutes || 15;
   const cutoffTime = settings ? `${settings.bookingCutoffHour}:${String(settings.bookingCutoffMinute || 0).padStart(2, '0')}` : '07:30 PM';
 
+  const allowedDays = settings
+    ? (bookingType === 'online' ? (settings.onlineDays || settings.availableDays) : settings.availableDays)
+    : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const closedDays = daysOfWeek.filter(d => !allowedDays.includes(d));
+
+  const getSelectedDayName = () => {
+    if (!date) return '';
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'UTC' });
+  };
+
   return (
     <section id="bookings" className="py-12 sm:py-16 bg-white select-text">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -719,6 +740,11 @@ export default function BookingForm() {
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   Today ({new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })})
                 </div>
+                {closedDays.length > 0 && (
+                  <p className="mt-1.5 text-[10px] text-amber-700 font-bold bg-amber-50 border border-amber-200/50 rounded-lg px-2.5 py-1 w-fit">
+                    ⚠️ Closed on: {closedDays.join(', ')}
+                  </p>
+                )}
               </div>
 
               {/* Time scheduler slots grid */}
@@ -729,6 +755,14 @@ export default function BookingForm() {
                   </label>
                   {loadingSlots ? (
                     <p className="text-xs font-bold text-gray-500 animate-pulse">Loading slots...</p>
+                  ) : isHoliday ? (
+                    <p className="text-xs font-bold text-rose-700 bg-rose-50 p-3 rounded-lg border border-rose-200">
+                      The clinic is closed today due to a public holiday or special schedule.
+                    </p>
+                  ) : isClosedDay ? (
+                    <p className="text-xs font-bold text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                      The clinic is closed today ({getSelectedDayName()}). Please visit us on our working days.
+                    </p>
                   ) : fullyBooked ? (
                     <p className="text-xs font-bold text-rose-700 bg-rose-50 p-3 rounded-lg border border-rose-200">
                       Fully booked for this day. Please pick another date.
@@ -803,7 +837,7 @@ export default function BookingForm() {
 
               <button
                 type="submit"
-                disabled={loading || !time || fullyBooked || bookingClosed}
+                disabled={loading || !time || fullyBooked || bookingClosed || isClosedDay || isHoliday}
                 className="w-full py-4 bg-[#1B4F72] hover:bg-teal-650 text-white font-sans font-bold text-xs sm:text-sm uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-md outline-none"
               >
                 {loading ? <Clock className="w-5 h-5 animate-spin" /> : 'Confirm Booking Request'}

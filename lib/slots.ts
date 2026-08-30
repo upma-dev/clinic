@@ -33,7 +33,9 @@ export function generateDaySlots(settings: ClinicSettings, type: 'clinic' | 'onl
   const slots: string[] = [];
 
   // Use the exact same morning and evening shift ranges for both online & offline consultations
-  const duration = settings.slotDurationMinutes || 15;
+  const duration = type === 'online' 
+    ? (settings.onlineSlotDuration ?? settings.slotDurationMinutes ?? 15)
+    : (settings.slotDurationMinutes ?? settings.onlineSlotDuration ?? 15);
   const ranges = [
     [parseHHMM(settings.morningStart), parseHHMM(settings.morningEnd)],
     [parseHHMM(settings.eveningStart), parseHHMM(settings.eveningEnd)],
@@ -82,10 +84,10 @@ export function buildSlotAvailability(
   blockedTimes: Set<string>,
   totalBookings: number,
   type: 'clinic' | 'online' = 'online'
-): { slots: SlotAvailability[]; fullyBooked: boolean; bookingClosed: boolean } {
+): { slots: SlotAvailability[]; fullyBooked: boolean; bookingClosed: boolean; isClosedDay?: boolean; isHoliday?: boolean } {
   // 1. Check if online booking is completely disabled
   if (type === 'online' && !settings.enableOnlineBooking) {
-    return { slots: [], fullyBooked: true, bookingClosed: true };
+    return { slots: [], fullyBooked: true, bookingClosed: true, isClosedDay: true };
   }
 
   // 2. Check if date is in the past or cutoff is reached
@@ -94,18 +96,20 @@ export function buildSlotAvailability(
   const fullyBooked = totalBookings >= maxLimit;
 
   // 3. Check weekday availability
-  const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
+  const [year, month, day] = date.split('-').map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const dayOfWeek = utcDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
   const allowedDays = type === 'online' ? (settings.onlineDays || settings.availableDays) : settings.availableDays;
   if (!allowedDays.includes(dayOfWeek)) {
-    return { slots: [], fullyBooked: true, bookingClosed: true };
+    return { slots: [], fullyBooked: true, bookingClosed: true, isClosedDay: true };
   }
 
   // 4. Check holidays
   if (settings.holidays?.includes(date)) {
-    return { slots: [], fullyBooked: true, bookingClosed: true };
+    return { slots: [], fullyBooked: true, bookingClosed: true, isHoliday: true };
   }
   if (type === 'online' && settings.onlineHolidayExceptions?.includes(date)) {
-    return { slots: [], fullyBooked: true, bookingClosed: true };
+    return { slots: [], fullyBooked: true, bookingClosed: true, isHoliday: true };
   }
 
   // 5. Generate all slots for that day type
@@ -115,7 +119,7 @@ export function buildSlotAvailability(
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const todayStr = now.toISOString().split('T')[0];
-  const bufferMinutes = (type === 'online' ? (settings.bookingBufferHours || 2) : 0) * 60;
+  const bufferMinutes = (type === 'online' ? (settings.bookingBufferHours ?? 2) : 0) * 60;
 
   const slots: SlotAvailability[] = allSlots.map((time) => {
     let status: SlotStatus = 'available';
@@ -207,5 +211,13 @@ export function formatPrice(price: string): string {
     return `₹${clean}`;
   }
   return clean;
+}
+
+export function getClosedDaysString(allowedDays: string[]): string {
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const closedDays = daysOfWeek.filter(d => !allowedDays.includes(d));
+  if (closedDays.length === 0) return 'Open 7 Days';
+  if (closedDays.length === 7) return 'All Days Closed';
+  return `${closedDays.join(', ')} Closed`;
 }
 

@@ -1330,7 +1330,10 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                       <button
                         type="button"
                         disabled={loading}
-                        onClick={() => saveSettings(settings)}
+                        onClick={async () => {
+                          if (settings) await saveSettings(settings);
+                          if (cms) await saveCms(cms);
+                        }}
                         className="px-5 py-2.5 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all outline-none cursor-pointer shrink-0"
                       >
                         <Save className="w-4 h-4" />
@@ -1441,158 +1444,108 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                         </div>
                       </div>
 
-                      {/* Card 3: Consultation Pricing Fees Cards */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
-                        <div className="flex items-center gap-3 border-b pb-3">
-                          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-                            <DollarSign className="w-5 h-5" />
+                      {/* Top Banner Announcement Alert (Moved from CMS) */}
+                      {cms && (
+                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                          <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                                <Sparkles className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Top Banner Announcement Alert</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Displays ticker banner at top of website</p>
+                              </div>
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
+                              <span className="text-xs font-bold text-gray-700">Enable Banner</span>
+                              <input
+                                type="checkbox"
+                                checked={cms.bannerEnabled}
+                                onChange={(e) => setCms({ ...cms, bannerEnabled: e.target.checked })}
+                                className="w-4 h-4 accent-primary rounded"
+                              />
+                            </label>
                           </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Consultation Pricing Matrix (INR ₹)</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Standard consultation rates auto-applied during booking & payments</p>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Announcement Text</label>
+                              <input
+                                type="text"
+                                value={cms.bannerText}
+                                onChange={(e) => setCms({ ...cms, bannerText: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
+                              />
+                            </div>
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Redirect Link</label>
+                              <input
+                                type="text"
+                                value={cms.bannerLink}
+                                onChange={(e) => setCms({ ...cms, bannerLink: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
+                              />
+                            </div>
                           </div>
                         </div>
+                      )}
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-
-                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Clinic Checkup Fee</span>
-                            <div className="relative">
-                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                              <input
-                                type="number"
-                                value={settings.consultationFee}
-                                onChange={(e) => setSettings({ ...settings, consultationFee: Number(e.target.value) })}
-                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                              />
+                      {/* Card 3: About Doctor/Clinic (Moved from CMS) */}
+                      {cms && (
+                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                          <div className="flex items-center gap-3 border-b pb-3">
+                            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                              <FileText className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">About Clinic Section</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Doctor bio and clinical practice philosophy</p>
                             </div>
                           </div>
 
-                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Online Video Fee</span>
-                            <div className="relative">
-                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Title</label>
                               <input
-                                type="number"
-                                value={settings.onlineConsultationFee}
-                                onChange={(e) => setSettings({ ...settings, onlineConsultationFee: Number(e.target.value) })}
-                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                                type="text"
+                                value={cms.aboutTitle}
+                                onChange={(e) => setCms({ ...cms, aboutTitle: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
+                              />
+                            </div>
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Subtitle</label>
+                              <input
+                                type="text"
+                                value={cms.aboutSubtitle}
+                                onChange={(e) => setCms({ ...cms, aboutSubtitle: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
                               />
                             </div>
                           </div>
-
-                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Walk-in Offline Fee</span>
-                            <div className="relative">
-                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                              <input
-                                type="number"
-                                value={settings.offlineConsultationFee}
-                                onChange={(e) => setSettings({ ...settings, offlineConsultationFee: Number(e.target.value) })}
-                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Emergency Fee</span>
-                            <div className="relative">
-                              <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                              <input
-                                type="number"
-                                value={settings.emergencyFee}
-                                onChange={(e) => setSettings({ ...settings, emergencyFee: Number(e.target.value) })}
-                                className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                              />
-                            </div>
-                          </div>
-
-                        </div>
-                      </div>
-
-                      {/* Card 4: Operating Capacity & Session Timings */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-5 hover:shadow-md transition-all">
-                        <div className="flex items-center gap-3 border-b pb-3">
-                          <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                            <Clock className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Capacity & Session Hours</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Set patient intake limits and OPD operational hours</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 
                           <div className="flex flex-col">
-                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Max Patients / Hour</label>
-                            <input
-                              type="number"
-                              value={settings.maxPatientsPerHour}
-                              onChange={(e) => setSettings({ ...settings, maxPatientsPerHour: Number(e.target.value) })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
+                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Description</label>
+                            <textarea
+                              rows={4}
+                              value={cms.aboutDescription}
+                              onChange={(e) => setCms({ ...cms, aboutDescription: e.target.value })}
+                              className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
                             />
                           </div>
-
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Max Daily Bookings</label>
-                            <input
-                              type="number"
-                              value={settings.maxBookingsPerDay}
-                              onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
-                            />
-                          </div>
-
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Morning Session Hours</label>
-                            <div className="flex gap-1.5 items-center">
-                              <input
-                                type="text"
-                                value={settings.morningStart}
-                                onChange={(e) => setSettings({ ...settings, morningStart: e.target.value })}
-                                placeholder="09:00"
-                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                              />
-                              <span className="text-gray-400 font-bold text-xs">-</span>
-                              <input
-                                type="text"
-                                value={settings.morningEnd}
-                                onChange={(e) => setSettings({ ...settings, morningEnd: e.target.value })}
-                                placeholder="14:00"
-                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Evening Session Hours</label>
-                            <div className="flex gap-1.5 items-center">
-                              <input
-                                type="text"
-                                value={settings.eveningStart}
-                                onChange={(e) => setSettings({ ...settings, eveningStart: e.target.value })}
-                                placeholder="17:00"
-                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                              />
-                              <span className="text-gray-400 font-bold text-xs">-</span>
-                              <input
-                                type="text"
-                                value={settings.eveningEnd}
-                                onChange={(e) => setSettings({ ...settings, eveningEnd: e.target.value })}
-                                placeholder="21:00"
-                                className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-purple-500 outline-none"
-                              />
-                            </div>
-                          </div>
-
                         </div>
-                      </div>
+                      )}
+
+
 
                       <button
                         type="button"
                         disabled={loading}
-                        onClick={() => saveSettings(settings)}
+                        onClick={async () => {
+                          if (settings) await saveSettings(settings);
+                          if (cms) await saveCms(cms);
+                        }}
                         className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-primary hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
                       >
                         <Save className="w-4 h-4 text-emerald-300" />
@@ -1656,7 +1609,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                                 <button
                                   type="button"
                                   key={mins}
-                                  onClick={() => setSettings({ ...settings, onlineSlotDuration: mins })}
+                                  onClick={() => setSettings({ ...settings, onlineSlotDuration: mins, slotDurationMinutes: mins })}
                                   className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${settings.onlineSlotDuration === mins
                                     ? 'bg-primary text-white border-primary shadow-xs'
                                     : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
@@ -1668,61 +1621,169 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4 pt-2">
-                            {/* Max Patients Per Day */}
+                          {/* Capacity limits */}
+                          <div className="grid grid-cols-3 gap-3 pt-2">
                             <div className="flex flex-col">
-                              <label className="text-xs font-bold text-gray-800 mb-1.5">Max Patients Per Day</label>
+                              <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Max Patients/Hour</label>
+                              <input
+                                type="number"
+                                value={settings.maxPatientsPerHour}
+                                onChange={(e) => setSettings({ ...settings, maxPatientsPerHour: Number(e.target.value) })}
+                                className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
+                              />
+                            </div>
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Max Online/Day</label>
                               <input
                                 type="number"
                                 value={settings.onlineMaxDailyBooking}
                                 onChange={(e) => setSettings({ ...settings, onlineMaxDailyBooking: Number(e.target.value) })}
-                                className="px-4 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
-                                placeholder="e.g. 15 Patients"
+                                className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
+                                placeholder="e.g. 15"
                               />
                             </div>
-
-                            {/* Advance Notice Needed */}
                             <div className="flex flex-col">
-                              <label className="text-xs font-bold text-gray-800 mb-1.5">Advance Notice Required</label>
-                              <select
-                                value={settings.bookingBufferHours}
-                                onChange={(e) => setSettings({ ...settings, bookingBufferHours: Number(e.target.value) })}
-                                className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
-                              >
-                                <option value={0}>Same Time Allowed</option>
-                                <option value={2}>2 Hours Advance</option>
-                                <option value={6}>6 Hours Advance</option>
-                                <option value={12}>12 Hours Advance</option>
-                                <option value={24}>24 Hours Advance</option>
-                              </select>
+                              <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Max Offline/Day</label>
+                              <input
+                                type="number"
+                                value={settings.maxBookingsPerDay}
+                                onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
+                                className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
+                              />
                             </div>
                           </div>
 
-                          {/* Clinic Opening & Closing Time */}
-                          <div className="pt-2 border-t border-gray-150 space-y-3">
-                            <label className="text-xs font-bold text-gray-800 block">Clinic Opening & Closing Hours</label>
+                          {/* Advance notice needed */}
+                          <div className="flex flex-col pt-2 border-t border-gray-150">
+                            <label className="text-xs font-bold text-gray-800 mb-1.5">Advance Notice Required</label>
+                            <select
+                              value={settings.bookingBufferHours}
+                              onChange={(e) => setSettings({ ...settings, bookingBufferHours: Number(e.target.value) })}
+                              className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
+                            >
+                              <option value={0}>Same Time Allowed</option>
+                              <option value={1}>1 Hour Advance</option>
+                              <option value={2}>2 Hours Advance</option>
+                              <option value={6}>6 Hours Advance</option>
+                              <option value={12}>12 Hours Advance</option>
+                              <option value={24}>24 Hours Advance</option>
+                            </select>
+                          </div>
+
+                          {/* Session Timings (Morning & Evening OPD Session timings) */}
+                          <div className="pt-3 border-t border-gray-150 space-y-3">
+                            <label className="text-xs font-bold text-gray-800 block">OPD Session Timings</label>
                             <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Opening Time</span>
-                                <input
-                                  type="time"
-                                  value={settings.onlineStart || '09:00'}
-                                  onChange={(e) => setSettings({ ...settings, onlineStart: e.target.value })}
-                                  className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
-                                />
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Morning Hours</span>
+                                <div className="flex gap-1.5 items-center">
+                                  <input
+                                    type="text"
+                                    value={settings.morningStart}
+                                    onChange={(e) => setSettings({ ...settings, morningStart: e.target.value })}
+                                    placeholder="09:00"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                  />
+                                  <span className="text-gray-400 font-bold text-xs">-</span>
+                                  <input
+                                    type="text"
+                                    value={settings.morningEnd}
+                                    onChange={(e) => setSettings({ ...settings, morningEnd: e.target.value })}
+                                    placeholder="14:00"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                  />
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Closing Time</span>
-                                <input
-                                  type="time"
-                                  value={settings.onlineEnd || '18:00'}
-                                  onChange={(e) => setSettings({ ...settings, onlineEnd: e.target.value })}
-                                  className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
-                                />
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Evening Hours</span>
+                                <div className="flex gap-1.5 items-center">
+                                  <input
+                                    type="text"
+                                    value={settings.eveningStart}
+                                    onChange={(e) => setSettings({ ...settings, eveningStart: e.target.value })}
+                                    placeholder="17:00"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                  />
+                                  <span className="text-gray-400 font-bold text-xs">-</span>
+                                  <input
+                                    type="text"
+                                    value={settings.eveningEnd}
+                                    onChange={(e) => setSettings({ ...settings, eveningEnd: e.target.value })}
+                                    placeholder="21:00"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                  />
+                                </div>
                               </div>
                             </div>
                           </div>
 
+                        </div>
+
+                        {/* Consultation Pricing Matrix Card (Moved from Clinic Settings) */}
+                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                          <div className="flex items-center gap-3 border-b pb-3">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                              <DollarSign className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Consultation Pricing Matrix (INR ₹)</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Standard consultation rates auto-applied during booking & payments</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Clinic Checkup Fee</span>
+                              <div className="relative">
+                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                                <input
+                                  type="number"
+                                  value={settings.consultationFee}
+                                  onChange={(e) => setSettings({ ...settings, consultationFee: Number(e.target.value) })}
+                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Online Video Fee</span>
+                              <div className="relative">
+                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                                <input
+                                  type="number"
+                                  value={settings.onlineConsultationFee}
+                                  onChange={(e) => setSettings({ ...settings, onlineConsultationFee: Number(e.target.value) })}
+                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Walk-in Offline Fee</span>
+                              <div className="relative">
+                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                                <input
+                                  type="number"
+                                  value={settings.offlineConsultationFee}
+                                  onChange={(e) => setSettings({ ...settings, offlineConsultationFee: Number(e.target.value) })}
+                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Emergency Fee</span>
+                              <div className="relative">
+                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
+                                <input
+                                  type="number"
+                                  value={settings.emergencyFee}
+                                  onChange={(e) => setSettings({ ...settings, emergencyFee: Number(e.target.value) })}
+                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
                         </div>
 
                         {/* Working Days Card */}
@@ -1739,7 +1800,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
                           <div className="space-y-2 pt-1">
                             {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
-                              const isOpen = settings.onlineDays?.includes(day);
+                              const isOpen = settings.onlineDays?.includes(day) || settings.availableDays?.includes(day);
                               return (
                                 <label
                                   key={day}
@@ -1762,10 +1823,17 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                                       type="checkbox"
                                       checked={isOpen}
                                       onChange={(e) => {
-                                        const nextDays = e.target.checked
+                                        const nextOnlineDays = e.target.checked
                                           ? [...(settings.onlineDays || []), day]
                                           : (settings.onlineDays || []).filter(d => d !== day);
-                                        setSettings({ ...settings, onlineDays: nextDays });
+                                        const nextAvailableDays = e.target.checked
+                                          ? [...(settings.availableDays || []), day]
+                                          : (settings.availableDays || []).filter(d => d !== day);
+                                        setSettings({
+                                          ...settings,
+                                          onlineDays: nextOnlineDays,
+                                          availableDays: nextAvailableDays
+                                        });
                                       }}
                                       className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
                                     />
@@ -1776,121 +1844,84 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                           </div>
                         </div>
 
-                      </div>
-
-                      {/* Card: Online Booking & Payment Policies */}
-                      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
-                        <div className="flex items-center gap-3 border-b pb-3">
-                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                            <Settings className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Online Booking & Payment Policies</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Configure prepayment requirements and approval rules for online slots</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* Toggle 1: Enable Online Booking */}
-                          <label
-                            className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
-                              settings.enableOnlineBooking
-                                ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
-                                : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="space-y-0.5">
-                              <span className="text-xs font-bold block">Enable Online Bookings</span>
-                              <span className="text-[10px] text-gray-500 font-medium block">Allow patients to schedule slots online</span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={!!settings.enableOnlineBooking}
-                              onChange={(e) => setSettings({ ...settings, enableOnlineBooking: e.target.checked })}
-                              className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
-                            />
-                          </label>
-
-                          {/* Toggle 2: Upfront Online Payment */}
-                          <label
-                            className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
-                              settings.onlinePaymentMandatory
-                                ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
-                                : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="space-y-0.5">
-                              <span className="text-xs font-bold block">Require Upfront Payment</span>
-                              <span className="text-[10px] text-gray-500 font-medium block">Patients must pay online during booking</span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={!!settings.onlinePaymentMandatory}
-                              onChange={(e) => setSettings({ ...settings, onlinePaymentMandatory: e.target.checked })}
-                              className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
-                            />
-                          </label>
-
-                          {/* Toggle 3: Requires Approval */}
-                          <label
-                            className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
-                              settings.onlineRequiresApproval
-                                ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
-                                : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="space-y-0.5">
-                              <span className="text-xs font-bold block">Require Doctor Approval</span>
-                              <span className="text-[10px] text-gray-500 font-medium block">Bookings start as pending approval</span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={!!settings.onlineRequiresApproval}
-                              onChange={(e) => setSettings({ ...settings, onlineRequiresApproval: e.target.checked })}
-                              className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
-                            />
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Automated Messages Card */}
-                      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
-                        <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-2">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                              <Sparkles className="w-5 h-5" />
+                        {/* Card: Online Booking & Payment Policies */}
+                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                          <div className="flex items-center gap-3 border-b pb-3">
+                            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                              <Settings className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Automated Patient Message Templates</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Custom SMS & WhatsApp templates sent automatically to patients</p>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Online Booking & Payment Policies</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Configure prepayment requirements and approval rules for online slots</p>
                             </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4">
+                            {/* Toggle 1: Enable Online Booking */}
+                            <label
+                              className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
+                                settings.enableOnlineBooking
+                                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                                  : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <span className="text-xs font-bold block">Enable Online Bookings</span>
+                                <span className="text-[10px] text-gray-500 font-medium block">Allow patients to schedule slots online</span>
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={!!settings.enableOnlineBooking}
+                                onChange={(e) => setSettings({ ...settings, enableOnlineBooking: e.target.checked })}
+                                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
+                              />
+                            </label>
+
+                            {/* Toggle 2: Upfront Online Payment */}
+                            <label
+                              className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
+                                settings.onlinePaymentMandatory
+                                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                                  : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <span className="text-xs font-bold block">Require Upfront Payment</span>
+                                <span className="text-[10px] text-gray-500 font-medium block">Patients must pay online during booking</span>
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={!!settings.onlinePaymentMandatory}
+                                onChange={(e) => setSettings({ ...settings, onlinePaymentMandatory: e.target.checked })}
+                                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
+                              />
+                            </label>
+
+                            {/* Toggle 3: Requires Approval */}
+                            <label
+                              className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
+                                settings.onlineRequiresApproval
+                                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                                  : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <span className="text-xs font-bold block">Require Doctor Approval</span>
+                                <span className="text-[10px] text-gray-500 font-medium block">Bookings start as pending approval</span>
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={!!settings.onlineRequiresApproval}
+                                onChange={(e) => setSettings({ ...settings, onlineRequiresApproval: e.target.checked })}
+                                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
+                              />
+                            </label>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                          {[
-                            { key: 'booked', label: '📩 Booking Confirmation Message' },
-                            { key: 'confirmed', label: '✅ Appointment Approved' },
-                            { key: 'cancelled', label: '❌ Cancellation Notice' },
-                            { key: 'rescheduled', label: '🔄 Rescheduled Date Notice' },
-                            { key: 'reminderBefore', label: '⏰ 1-Hour Before Reminder' },
-                            { key: 'prescriptionReady', label: '📄 Prescription PDF Ready' },
-                          ].map(tmpl => (
-                            <div key={tmpl.key} className="bg-gray-50/60 border border-gray-200 rounded-xl p-4 space-y-2 hover:border-primary/40 transition-colors">
-                              <label className="text-xs font-bold text-gray-800 block">{tmpl.label}</label>
-                              <textarea
-                                rows={3}
-                                value={(settings.emailTemplates as any)?.[tmpl.key] || ''}
-                                onChange={(e) => setSettings({
-                                  ...settings,
-                                  emailTemplates: { ...(settings.emailTemplates || {} as any), [tmpl.key]: e.target.value }
-                                })}
-                                className="w-full p-3 border border-gray-200 rounded-xl text-xs font-medium resize-none outline-none focus:border-primary focus:bg-white bg-white transition-all"
-                              />
-                            </div>
-                          ))}
-                        </div>
                       </div>
+
+
 
                       <button
                         type="button"
@@ -2342,50 +2373,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                   {cms && (
                     <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
 
-                      {/* Card 1: Top Banner Section */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                        <div className="flex items-center justify-between border-b pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                              <Sparkles className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Top Banner Announcement Alert</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Displays ticker banner at top of website</p>
-                            </div>
-                          </div>
-                          <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
-                            <span className="text-xs font-bold text-gray-700">Enable Banner</span>
-                            <input
-                              type="checkbox"
-                              checked={cms.bannerEnabled}
-                              onChange={(e) => setCms({ ...cms, bannerEnabled: e.target.checked })}
-                              className="w-4 h-4 accent-primary rounded"
-                            />
-                          </label>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Announcement Text</label>
-                            <input
-                              type="text"
-                              value={cms.bannerText}
-                              onChange={(e) => setCms({ ...cms, bannerText: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Redirect Link</label>
-                            <input
-                              type="text"
-                              value={cms.bannerLink}
-                              onChange={(e) => setCms({ ...cms, bannerLink: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
-                            />
-                          </div>
-                        </div>
-                      </div>
 
                       {/* Card 2: Homepage Hero Segment */}
                       <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
