@@ -249,24 +249,51 @@ export default function WalkInForm({ onRegistered }: WalkInFormProps) {
                 Booking closed for today.
               </p>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 border rounded-xl bg-gray-50/30">
-                {slots.map((slot) => (
-                  <button
-                    key={slot.time}
-                    type="button"
-                    disabled={slot.status !== 'available'}
-                    onClick={() => setTime(slot.time)}
-                    className={`py-2 px-1 rounded-lg text-[9px] font-bold border transition-all cursor-pointer ${
-                      slot.status !== 'available'
-                        ? 'bg-gray-150 text-gray-400 border-gray-200 cursor-not-allowed line-through'
-                        : time === slot.time
-                        ? 'bg-primary text-white border-primary ring-2 ring-primary/20'
-                        : 'bg-white text-gray-800 border-gray-300 hover:border-primary'
-                    }`}
-                  >
-                    {slot.time}
-                  </button>
-                ))}
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-1 border rounded-xl bg-gray-50/30">
+                  {slots.map((slot) => {
+                    const isAvailable = slot.status === 'available';
+                    const isBooked = slot.status === 'booked';
+                    const isBlocked = slot.status === 'blocked';
+                    
+                    return (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        disabled={!isAvailable}
+                        title={isBlocked ? "Blocked by Doctor" : isBooked ? "Already Booked" : "Available"}
+                        onClick={() => setTime(slot.time)}
+                        className={`py-2 px-1 rounded-lg text-[9px] font-bold border transition-all cursor-pointer ${
+                          isAvailable
+                            ? time === slot.time
+                              ? 'bg-primary text-white border-primary ring-2 ring-primary/20 shadow-xs'
+                              : 'bg-white text-gray-800 border-gray-300 hover:border-primary'
+                            : isBlocked
+                              ? 'bg-rose-50 text-rose-500 border-rose-200 cursor-not-allowed'
+                              : 'bg-gray-150 text-gray-400 border-gray-200 cursor-not-allowed line-through'
+                        }`}
+                      >
+                        {slot.time}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Legend Indicator */}
+                <div className="flex items-center gap-3 mt-1.5 text-[8px] font-black uppercase tracking-wider text-gray-500 justify-center">
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded bg-white border border-gray-300 shadow-2xs" />
+                    <span>Available</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded bg-gray-150 border border-gray-200 line-through" />
+                    <span>Booked</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded bg-rose-50 border border-rose-200" />
+                    <span>Blocked</span>
+                  </div>
+                </div>
               </div>
             )}
           </div>

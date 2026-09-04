@@ -756,6 +756,7 @@ import QuestionnaireView from '@/components/telemedicine/QuestionnaireView';
 import DailyRoutineDashboard from '@/components/sections/DailyRoutineDashboard';
 import PrescriptionDownloader from '@/components/patient/PrescriptionDownloader';
 import BookingForm from '@/components/sections/BookingForm';
+import RescheduleModal from '@/components/admin/RescheduleModal';
 
 export default function PatientPortal() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'routine' | 'booking' | 'consult'>('appointments');
@@ -778,6 +779,7 @@ export default function PatientPortal() {
   // Modal state
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<any | null>(null);
   const [activeQuestionnaire, setActiveQuestionnaire] = useState<any>(null); // For Telemedicine
 
   const [telemedicineBookings, setTelemedicineBookings] = useState<any[]>([]);
@@ -1378,12 +1380,20 @@ export default function PatientPortal() {
                         )}
                       </div>
 
-                      <button
-                        onClick={() => setCancellingId(b.id)}
-                        className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer"
-                      >
-                        Cancel Booking
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setRescheduleTarget(b)}
+                          className="px-3.5 py-2 bg-[#1B4F72] hover:bg-[#0B1B29] text-white text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                        >
+                          <Clock className="w-3.5 h-3.5" /> Reschedule
+                        </button>
+                        <button
+                          onClick={() => setCancellingId(b.id)}
+                          className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl active:scale-95 transition-all cursor-pointer"
+                        >
+                          Cancel Booking
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -1401,24 +1411,32 @@ export default function PatientPortal() {
                     </div>
                   ) : (
                     pastBookings.map((b) => (
-                      <div key={b.id} className="p-4 flex items-center justify-between text-xs font-medium hover:bg-gray-50 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-xl shrink-0 ${b.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-gray-100 text-gray-500'}`}>
-                            {b.status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                      <div key={b.id} className="p-4 flex flex-col gap-2 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between text-xs font-medium">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-xl shrink-0 ${b.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-gray-100 text-gray-500'}`}>
+                              {b.status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900">{b.service}</p>
+                              <p className="text-[10px] text-gray-500 font-semibold mt-0.5">{b.date} at {b.time}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-gray-900">{b.service}</p>
-                            <p className="text-[10px] text-gray-500 font-semibold mt-0.5">{b.date} at {b.time}</p>
-                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${b.status === 'completed'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : b.status === 'cancelled'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-gray-50 text-gray-600 border-gray-200'
+                            }`}>
+                            {b.status}
+                          </span>
                         </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${b.status === 'completed'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : b.status === 'cancelled'
-                            ? 'bg-rose-50 text-rose-700 border-rose-200'
-                            : 'bg-gray-50 text-gray-600 border-gray-200'
-                          }`}>
-                          {b.status}
-                        </span>
+
+                        {b.prescriptionData && (
+                          <div className="pt-2 border-t border-gray-100">
+                            <PrescriptionDownloader booking={b} prescriptionData={b.prescriptionData} />
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
@@ -1627,6 +1645,17 @@ export default function PatientPortal() {
           </div>
         </div>
       )}
+
+      {/* RESCHEDULE MODAL */}
+      <RescheduleModal
+        booking={rescheduleTarget}
+        isOpen={!!rescheduleTarget}
+        onClose={() => setRescheduleTarget(null)}
+        onSuccess={() => {
+          setRescheduleTarget(null);
+          fetchData();
+        }}
+      />
 
       {/* QUESTIONNAIRE MODAL */}
       {activeQuestionnaire && (

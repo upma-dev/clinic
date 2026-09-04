@@ -222,6 +222,15 @@ export async function POST(req: NextRequest) {
 
     const selectedTime = time || currentTime;
 
+    const { isSlotTaken } = await import('@/lib/db/bookings');
+    const isOccupied = await isSlotTaken(date, selectedTime);
+    if (isOccupied) {
+      return NextResponse.json(
+        { error: `Time slot ${selectedTime} is already occupied. Please select an available time slot.` },
+        { status: 409 }
+      );
+    }
+
     // Full booking record with all intake fields
     const booking: Booking = {
       id: walkInId,

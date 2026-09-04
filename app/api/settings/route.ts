@@ -1,13 +1,18 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getSession } from '@/lib/auth';
 import { getClinicSettings, updateClinicSettings } from '@/lib/db/settings';
 
 export async function GET() {
   try {
     const settings = await getClinicSettings();
-    return NextResponse.json(settings);
+    return NextResponse.json(settings, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Settings unavailable';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -35,8 +40,6 @@ export async function POST(req: NextRequest) {
     if (body.morningEnd !== undefined) patch.morningEnd = body.morningEnd;
     if (body.eveningStart !== undefined) patch.eveningStart = body.eveningStart;
     if (body.eveningEnd !== undefined) patch.eveningEnd = body.eveningEnd;
-    if (body.lunchStart !== undefined) patch.lunchStart = body.lunchStart;
-    if (body.lunchEnd !== undefined) patch.lunchEnd = body.lunchEnd;
 
     if (body.availableDays !== undefined) patch.availableDays = body.availableDays;
     if (body.holidays !== undefined) patch.holidays = body.holidays;
@@ -46,28 +49,18 @@ export async function POST(req: NextRequest) {
     if (body.offlineConsultationFee !== undefined) patch.offlineConsultationFee = Number(body.offlineConsultationFee);
     if (body.emergencyFee !== undefined) patch.emergencyFee = Number(body.emergencyFee);
 
-    if (body.maxPatientsPerHour !== undefined) patch.maxPatientsPerHour = Number(body.maxPatientsPerHour);
-    if (body.maxOnlineSlots !== undefined) patch.maxOnlineSlots = Number(body.maxOnlineSlots);
-    if (body.maxOfflineSlots !== undefined) patch.maxOfflineSlots = Number(body.maxOfflineSlots);
     if (body.slotDurationMinutes !== undefined) patch.slotDurationMinutes = Number(body.slotDurationMinutes);
     if (body.reminderTimeMinutes !== undefined) patch.reminderTimeMinutes = Number(body.reminderTimeMinutes);
     if (body.emailTemplates !== undefined) patch.emailTemplates = body.emailTemplates;
 
-    if (body.maxBookingsPerDay !== undefined) {
-      patch.maxBookingsPerDay = Math.min(200, Math.max(1, Number(body.maxBookingsPerDay)));
-    }
     if (body.bookingCutoffHour !== undefined) patch.bookingCutoffHour = Number(body.bookingCutoffHour);
     if (body.bookingCutoffMinute !== undefined) patch.bookingCutoffMinute = Number(body.bookingCutoffMinute);
 
-    // Online booking toggles
-    if (body.enableOnlineBooking !== undefined) patch.enableOnlineBooking = !!body.enableOnlineBooking;
+    // Online booking controls
     if (body.onlineDays !== undefined) patch.onlineDays = body.onlineDays;
     if (body.onlineStart !== undefined) patch.onlineStart = body.onlineStart;
     if (body.onlineEnd !== undefined) patch.onlineEnd = body.onlineEnd;
     if (body.onlineSlotDuration !== undefined) patch.onlineSlotDuration = Number(body.onlineSlotDuration);
-    if (body.onlineBreakStart !== undefined) patch.onlineBreakStart = body.onlineBreakStart;
-    if (body.onlineBreakEnd !== undefined) patch.onlineBreakEnd = body.onlineBreakEnd;
-    if (body.onlineMaxDailyBooking !== undefined) patch.onlineMaxDailyBooking = Number(body.onlineMaxDailyBooking);
     if (body.bookingBufferHours !== undefined) patch.bookingBufferHours = Number(body.bookingBufferHours);
     if (body.onlineHolidayExceptions !== undefined) patch.onlineHolidayExceptions = body.onlineHolidayExceptions;
     if (body.onlinePaymentMandatory !== undefined) patch.onlinePaymentMandatory = !!body.onlinePaymentMandatory;
@@ -89,7 +82,20 @@ export async function POST(req: NextRequest) {
     }
 
     const updated = await updateClinicSettings(patch);
-    return NextResponse.json(updated);
+
+    try {
+      revalidatePath('/', 'layout');
+      revalidatePath('/booking');
+      revalidatePath('/online-consultation');
+    } catch (e) {
+      console.error('Failed to revalidate paths on settings update:', e);
+    }
+
+    return NextResponse.json(updated, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Update failed';
     return NextResponse.json({ error: message }, { status: 500 });

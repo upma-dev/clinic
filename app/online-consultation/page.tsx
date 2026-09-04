@@ -389,7 +389,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/sections/Navbar';
 import Footer from '@/components/sections/Footer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -418,6 +418,29 @@ export default function OnlineConsultationPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [availableSlots, setAvailableSlots] = useState<{ time: string; status: string }[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  useEffect(() => {
+    if (formData.preferredDate) {
+      setLoadingSlots(true);
+      fetch(`/api/appointments/slots?date=${formData.preferredDate}&type=online`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.slots) {
+            setAvailableSlots(data.slots);
+            const firstAvail = data.slots.find((s: any) => s.status === 'available');
+            if (firstAvail && !formData.preferredTimeSlot) {
+              setFormData(prev => ({ ...prev, preferredTimeSlot: firstAvail.time }));
+            }
+          }
+        })
+        .catch(console.error)
+        .finally(() => setLoadingSlots(false));
+    } else {
+      setAvailableSlots([]);
+    }
+  }, [formData.preferredDate]);
 
   // Dummy file state for demo
   const [filesSelected, setFilesSelected] = useState(0);
@@ -741,12 +764,27 @@ export default function OnlineConsultationPage() {
                               <input required type="date" name="preferredDate" value={formData.preferredDate} onChange={handleChange} min={new Date().toISOString().split('T')[0]} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none" />
                             </div>
                             <div className="space-y-1.5">
-                              <label className="font-sans text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-1">Preferred Time Slot *</label>
+                              <label className="font-sans text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-1">
+                                Preferred Time Slot * {loadingSlots && <span className="text-primary font-normal text-[10px] animate-pulse">Loading slots...</span>}
+                              </label>
                               <select required name="preferredTimeSlot" value={formData.preferredTimeSlot} onChange={handleChange} className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none">
-                                <option value="">Select Time</option>
-                                <option>Morning (10 AM - 1 PM)</option>
-                                <option>Afternoon (2 PM - 5 PM)</option>
-                                <option>Evening (6 PM - 9 PM)</option>
+                                <option value="">Select Time Slot</option>
+                                {availableSlots.length > 0 ? (
+                                  availableSlots.map((s, idx) => (
+                                    <option key={idx} value={s.time} disabled={s.status !== 'available'}>
+                                      {s.time} {s.status !== 'available' ? `(${s.status.toUpperCase()})` : ''}
+                                    </option>
+                                  ))
+                                ) : (
+                                  <>
+                                    <option value="10:00 AM">10:00 AM</option>
+                                    <option value="11:00 AM">11:00 AM</option>
+                                    <option value="12:00 PM">12:00 PM</option>
+                                    <option value="05:00 PM">05:00 PM</option>
+                                    <option value="06:00 PM">06:00 PM</option>
+                                    <option value="07:00 PM">07:00 PM</option>
+                                  </>
+                                )}
                               </select>
                             </div>
                           </div>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { Booking, SlotAvailability } from '@/lib/types';
 import { todayISO } from '@/lib/slots';
+import RescheduleModal from './RescheduleModal';
 
 interface QueueControlsProps {
   todayBookings: Booking[];   // All of today's bookings from /api/appointments
@@ -22,7 +23,7 @@ interface QueueControlsProps {
 const WAITING_STATUSES = ['confirmed', 'booked', 'checked-in', 'arrived'];
 const SERVING_STATUSES = ['arrived'];           // Currently being served
 const DONE_STATUSES = ['completed'];
-const SKIPPED_STATUSES = ['no-show', 'cancelled'];
+const SKIPPED_STATUSES = ['no-show'];
 
 function parseTimeToMinutes(timeStr: string): number {
   if (!timeStr) return 0;
@@ -49,7 +50,8 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
   const [actionMsg, setActionMsg] = useState('');
   const [error, setError] = useState('');
   const [whatsappModal, setWhatsappModal] = useState<{ url: string; patientName: string; action: string } | null>(null);
-  const [queueFilter, setQueueFilter] = useState<'waiting' | 'done' | 'skipped' | 'all'>('waiting');
+  const [queueFilter, setQueueFilter] = useState<'waiting' | 'done' | 'skipped' | 'cancelled' | 'all'>('waiting');
+  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
 
   // ── Walk-in Modal ──
   const [showWalkinModal, setShowWalkinModal] = useState(false);
@@ -177,16 +179,24 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
       return (a.createdAt || '').localeCompare(b.createdAt || '');
     });
 
-  // Filter out any bookings that are still pending approval from the live queue
-  const activeQueueBookings = todayBookings.filter(b => b.status !== 'pending');
+  // Filter out pending and cancelled bookings from the active queue
+  const activeQueueBookings = todayBookings.filter(
+    b => b.status !== 'cancelled' && (b.status !== 'pending' || String(b.paymentStatus || '').toLowerCase() === 'paid')
+  );
 
   const waitingBookings = sortBookings(
-    activeQueueBookings.filter(b => WAITING_STATUSES.includes(b.status as string) && !SERVING_STATUSES.includes(b.status as string))
+    activeQueueBookings.filter(b => 
+      (WAITING_STATUSES.includes(b.status as string) || String(b.paymentStatus || '').toLowerCase() === 'paid') && 
+      !SERVING_STATUSES.includes(b.status as string) && 
+      !DONE_STATUSES.includes(b.status as string) && 
+      !SKIPPED_STATUSES.includes(b.status as string)
+    )
   );
   const servingBooking = activeQueueBookings.find(b => SERVING_STATUSES.includes(b.status as string));
   const doneBookings = sortBookings(activeQueueBookings.filter(b => DONE_STATUSES.includes(b.status as string)));
   const skippedBookings = sortBookings(activeQueueBookings.filter(b => SKIPPED_STATUSES.includes(b.status as string)));
-  const totalToday = activeQueueBookings.length;
+  const cancelledBookings = sortBookings(todayBookings.filter(b => b.status === 'cancelled'));
+  const totalToday = todayBookings.length;
 
   // ── Estimated wait (15 min per patient) ──
   const estWaitMinutes = waitingBookings.length * 15;
@@ -1045,6 +1055,23 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
 
             <button
               type="button"
+              onClick={() => setQueueFilter('cancelled')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                queueFilter === 'cancelled'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              ❌ Cancelled
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                queueFilter === 'cancelled' ? 'bg-white text-rose-800' : 'bg-rose-100 text-rose-800'
+              }`}>
+                {cancelledBookings.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setQueueFilter('all')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                 queueFilter === 'all'
@@ -1110,7 +1137,8 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
             const displayList =
               queueFilter === 'done' ? doneBookings :
               queueFilter === 'skipped' ? skippedBookings :
-              queueFilter === 'all' ? sortBookings(activeQueueBookings).filter(b => !SERVING_STATUSES.includes(b.status as string)) :
+              queueFilter === 'cancelled' ? cancelledBookings :
+              queueFilter === 'all' ? sortBookings(todayBookings.filter(b => !SERVING_STATUSES.includes(b.status as string))) :
               waitingBookings;
 
             if (displayList.length === 0) {
@@ -1128,12 +1156,14 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                 {displayList.map((b, index) => {
                   const isDone = DONE_STATUSES.includes(b.status as string);
                   const isSkipped = SKIPPED_STATUSES.includes(b.status as string);
+                  const isCancelled = b.status === 'cancelled';
 
                   return (
                     <div key={b.id}
                       className={`p-4 rounded-xl border flex items-center justify-between gap-4 transition-colors ${
                         isDone ? 'bg-emerald-50/60 border-emerald-200' :
                         isSkipped ? 'bg-amber-50/60 border-amber-200' :
+                        isCancelled ? 'bg-rose-50/60 border-rose-200 opacity-80' :
                         index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-gray-50/60 border-gray-100 hover:bg-gray-50'
                       }`}
                     >
@@ -1141,15 +1171,22 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
                           isDone ? 'bg-emerald-600 text-white' :
                           isSkipped ? 'bg-amber-500 text-white' :
+                          isCancelled ? 'bg-rose-600 text-white' :
                           index === 0 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
                         }`}>
-                          {index + 1}
+                          {isCancelled ? '✕' : index + 1}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded capitalize ${b.source === 'online' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-                              {b.source === 'online' ? '🌐 Online' : '🚶 Walk-in'}
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded capitalize ${b.bookingType === 'online' ? 'bg-blue-100 text-blue-800' : b.source === 'online' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                              {b.bookingType === 'online' ? '🌐 Online Video' : b.source === 'online' ? '🌐 Web Booking' : '🚶 Walk-in'}
                             </span>
+
+                            {String(b.paymentStatus || '').toLowerCase() === 'paid' && (
+                              <span className="text-[9px] font-black text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded uppercase">
+                                Paid ₹{b.amountPaid || b.amount || ''}
+                              </span>
+                            )}
                             
                             {b.status === 'checked-in' && !isDone && !isSkipped && (
                               <span className="text-[9px] font-black text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded uppercase">
@@ -1162,9 +1199,14 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                                 ✓ Completed
                               </span>
                             )}
-                            {isSkipped && (
+                            {isCancelled && (
+                              <span className="text-[9px] font-black text-rose-800 bg-rose-100 px-1.5 py-0.5 rounded uppercase">
+                                Cancelled
+                              </span>
+                            )}
+                            {isSkipped && !isCancelled && (
                               <span className="text-[9px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded uppercase">
-                                No-Show
+                                Skipped (No-Show)
                               </span>
                             )}
                             {!isDone && !isSkipped && index === 0 && (
@@ -1172,31 +1214,43 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                             )}
                           </div>
                           <p className="font-bold text-gray-900 text-sm mt-0.5 truncate">{b.name}</p>
-                          <p className="text-[10px] text-gray-500 font-semibold">
-                            {b.phone} • Slot: {b.time} • {b.service}
+                          <p className="text-[10px] text-gray-500 font-semibold flex items-center gap-2 flex-wrap">
+                            <span>{b.phone} • Slot: {b.time} • {b.service}</span>
+                            {b.bookingType === 'online' && b.meetingLink && (
+                              <a
+                                href={b.meetingLink.replace('meet.jit.si', 'meet.ffmuc.net')}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-bold underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                🎥 Join Video
+                              </a>
+                            )}
                           </p>
                         </div>
                       </div>
 
                       {/* Per-row actions */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {isSkipped && (
+                        {isSkipped && !isCancelled && (
                           <button
-                            onClick={() => bookingAction(b.id, 'mark-waiting')}
-                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold uppercase cursor-pointer"
-                            title="Re-add to Lobby Queue"
+                            onClick={() => setRescheduleBooking(b)}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            title="Reschedule to available slot & re-add to lobby queue"
                           >
-                            Re-add
+                            <Clock className="w-3.5 h-3.5" />
+                            Reschedule & Re-add
                           </button>
                         )}
 
-                        {!isDone && !isSkipped && isDoctor && (
+                        {!isDone && !isSkipped && !isCancelled && isDoctor && (
                           <button onClick={() => bookingAction(b.id, 'emergency')}
                             className="p-2 hover:bg-rose-50 text-rose-400 hover:text-rose-600 border border-transparent hover:border-rose-200 rounded-lg cursor-pointer outline-none" title="Emergency">
                             <Star className="w-4 h-4" />
                           </button>
                         )}
-                        {!isDone && !isSkipped && !isDoctor && (
+                        {!isDone && !isSkipped && !isCancelled && !isDoctor && (
                           b.status === 'checked-in' ? (
                             <button onClick={() => bookingAction(b.id, 'complete')}
                               className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-[10px] uppercase cursor-pointer" title="Complete Consultation">
@@ -1209,15 +1263,22 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
                             </button>
                           )
                         )}
-                        {!isDone && !isSkipped && (
+                        {!isDone && !isSkipped && !isCancelled && (
                           <button onClick={() => handleSkip(b)}
                             className="p-2 hover:bg-amber-50 text-amber-400 hover:text-amber-600 rounded-lg cursor-pointer outline-none" title="Skip">
                             <ChevronLast className="w-4 h-4" />
                           </button>
                         )}
-                        {!isDone && (
-                          <button onClick={() => bookingAction(b.id, 'cancel')}
-                            className="p-2 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg cursor-pointer outline-none" title="Cancel">
+                        {!isDone && !isCancelled && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`Cancel appointment for ${b.name}?`)) {
+                                bookingAction(b.id, 'cancel');
+                              }
+                            }}
+                            className="p-2 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg cursor-pointer outline-none"
+                            title="Cancel Appointment"
+                          >
                             <UserMinus className="w-4 h-4" />
                           </button>
                         )}
@@ -1280,6 +1341,24 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
           </div>
         </div>
       )}
+
+      {/* RESCHEDULE & RE-ADD MODAL FOR SKIPPED PATIENTS */}
+      <RescheduleModal
+        booking={rescheduleBooking}
+        isOpen={!!rescheduleBooking}
+        onClose={() => setRescheduleBooking(null)}
+        onSuccess={(res) => {
+          setRescheduleBooking(null);
+          onUpdate();
+          if (res?.whatsappUrl) {
+            setWhatsappModal({
+              url: res.whatsappUrl,
+              patientName: rescheduleBooking?.name || 'Patient',
+              action: 'Rescheduled & Re-added',
+            });
+          }
+        }}
+      />
     </div>
   );
 }

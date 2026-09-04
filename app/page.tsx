@@ -124,14 +124,14 @@ export default async function Home() {
       {/* 8. Testimonials — social proof */}
       <Testimonials cms={cms} />
 
+      {/* 11. Blog */}
+      <BlogSection cms={cms} />
+
       {/* 9. Patient Portal — Check live queue */}
       <PatientPortal />
 
       {/* 10. How To Use — Guide */}
       <HowToUse />
-
-      {/* 11. Blog */}
-      <BlogSection cms={cms} />
 
       {/* 12. Contact + Map */}
       <Contact settings={settings} cms={cms} />

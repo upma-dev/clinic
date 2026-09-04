@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { FileText, Save } from 'lucide-react';
+import { FileText, Save, Eye } from 'lucide-react';
 import { PDFService } from '@/lib/services/PDFService';
 import { CloudinaryService } from '@/lib/services/CloudinaryService';
 
@@ -60,12 +60,18 @@ export default function ConsultationForm({ appointment, onComplete }: Props) {
 
       if (!res.ok) throw new Error('Failed to save consultation');
 
-      // 3. Open Prescription PDF via safe Blob URL
-      try {
-        PDFService.openPrescription(appointment, consultationData as any);
-      } catch (e) {
-        console.error(e);
-      }
+      // Mark appointment as completed in staff/manage API
+      await fetch('/api/telemedicine/staff/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'complete',
+          appointmentId: appointment._id
+        })
+      }).catch(() => {});
+
+      // Open official Prescription ready page just like Pre-Paid Log
+      window.open(`/admin/prescription?patientId=${appointment._id || appointment.id}&type=telemedicine`, '_blank');
 
       onComplete();
     } catch (err) {
@@ -93,13 +99,44 @@ export default function ConsultationForm({ appointment, onComplete }: Props) {
     <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
       <div className="flex justify-between items-center mb-4 border-b pb-3">
         <h3 className="font-playfair text-xl font-bold text-gray-900">Complete Consultation</h3>
-        <button
-          type="button"
-          onClick={autoFillSample}
-          className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold rounded-lg transition border border-emerald-200"
-        >
-          ⚡ Auto-Fill Sample Prescription
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.open(`/admin/prescription?patientId=${appointment._id || appointment.id}&type=telemedicine`, '_blank')}
+            className="px-3 py-1.5 bg-[#0B1B29] hover:bg-primary text-white text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 transition-colors outline-none cursor-pointer"
+            title="Open Prescription Generator (like Pre-Paid Log)"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Write Rx
+          </button>
+          {Boolean(
+            (appointment as any)?.hasCaseFile === true ||
+            (appointment as any)?.prescriptionSent === true ||
+            (appointment as any)?.caseFileSent === true ||
+            ((appointment as any)?.prescriptionPdfBase64 && String((appointment as any)?.prescriptionPdfBase64).length > 50) ||
+            ((appointment as any)?.prescriptionData && (
+              (typeof (appointment as any)?.prescriptionData?.medicines === 'string' && (appointment as any)?.prescriptionData?.medicines.trim().length > 0) ||
+              (typeof (appointment as any)?.prescriptionData?.advice === 'string' && (appointment as any)?.prescriptionData?.advice.trim().length > 0)
+            ))
+          ) && (
+            <button
+              type="button"
+              onClick={() => window.open(`/prescription/view?id=${appointment._id || appointment.id}`, '_blank')}
+              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 transition-colors outline-none cursor-pointer"
+              title="View Completed Prescription / Case File Pad"
+            >
+              <Eye className="w-3.5 h-3.5 text-emerald-600" />
+              View Case File
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={autoFillSample}
+            className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold rounded-lg transition border border-emerald-200"
+          >
+            ⚡ Auto-Fill Sample
+          </button>
+        </div>
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-4">

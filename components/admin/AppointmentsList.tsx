@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react';
 import type { Booking, PaymentStatus, BookingStatus } from '@/lib/types';
+import RescheduleModal from './RescheduleModal';
 import {
   CheckCircle2, XCircle, UserCheck, UserX, Search, Filter,
-  Calendar, Phone, CreditCard, ChevronDown, ChevronRight, ChevronLeft, CheckSquare, Clock, FileText, RefreshCw, MessageCircle, Video, List, LayoutGrid
+  Calendar, Phone, CreditCard, ChevronDown, ChevronRight, ChevronLeft, CheckSquare, Clock, FileText, RefreshCw, MessageCircle, Video, List, LayoutGrid, Mail, Eye
 } from 'lucide-react';
 
 interface AppointmentsListProps {
@@ -23,7 +24,7 @@ interface AppointmentsListProps {
   role?: 'staff' | 'doctor';
 }
 
-type FilterType = 'all' | 'online' | 'offline' | 'paid' | 'pending' | 'today' | 'upcoming' | 'cancelled' | 'completed' | 'approval';
+type FilterType = 'all' | 'online' | 'offline' | 'paid' | 'pending' | 'today' | 'upcoming' | 'cancelled' | 'completed' | 'skipped' | 'approval';
 
 export default function AppointmentsList({
   bookings,
@@ -38,15 +39,54 @@ export default function AppointmentsList({
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(50);
+  const [rescheduleBookingTarget, setRescheduleBookingTarget] = useState<Booking | null>(null);
 
   const [followUpDates, setFollowUpDates] = useState<Record<string, string>>({});
   const [showFollowUpInput, setShowFollowUpInput] = useState<Record<string, boolean>>({});
+
+  const hasCaseFile = (b: any) => {
+    if (!b) return false;
+    const hasPdf = Boolean(b.prescriptionPdfBase64 && String(b.prescriptionPdfBase64).length > 50);
+    const hasMeds = Boolean(
+      b.prescriptionData && (
+        (typeof b.prescriptionData.medicines === 'string' && b.prescriptionData.medicines.trim().length > 0) ||
+        (typeof b.prescriptionData.advice === 'string' && b.prescriptionData.advice.trim().length > 0)
+      )
+    );
+    return Boolean(
+      b.hasCaseFile === true ||
+      b.prescriptionSent === true ||
+      b.caseFileSent === true ||
+      hasPdf ||
+      hasMeds
+    );
+  };
 
   // Reschedule panel states
   const [showRescheduleInput, setShowRescheduleInput] = useState<Record<string, boolean>>({});
   const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({});
   const [rescheduleTimes, setRescheduleTimes] = useState<Record<string, string>>({});
   const [rescheduleReasons, setRescheduleReasons] = useState<Record<string, string>>({});
+  const [availableSlotsByBooking, setAvailableSlotsByBooking] = useState<Record<string, string[]>>({});
+
+  const handleDateChangeForReschedule = async (bookingId: string, newDate: string, bookingType?: string) => {
+    setRescheduleDates(prev => ({ ...prev, [bookingId]: newDate }));
+    if (!newDate) return;
+    try {
+      const type = bookingType === 'online' ? 'online' : 'clinic';
+      const res = await fetch(`/api/appointments/slots?date=${newDate}&type=${type}`);
+      if (res.ok) {
+        const data = await res.json();
+        const available = (data.slots || []).filter((s: any) => s.status === 'available').map((s: any) => s.time);
+        setAvailableSlotsByBooking(prev => ({ ...prev, [bookingId]: available }));
+        if (available.length > 0) {
+          setRescheduleTimes(prev => ({ ...prev, [bookingId]: available[0] }));
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // WhatsApp modal state
   const [whatsappModal, setWhatsappModal] = useState<{ url: string; patientName: string; action: string } | null>(null);
@@ -213,13 +253,17 @@ export default function AppointmentsList({
         return bk.status === 'cancelled';
       case 'completed':
         return bk.status === 'completed';
+      case 'skipped':
+        return bk.status === 'no-show' || bk.status === 'No Show' || (bk as any).status === 'skipped';
       default:
         return true;
     }
   });
 
-  // Count pending approval bookings for badge
+  // Count bookings by category for badge
   const pendingApprovalCount = bookings.filter(bk => bk.status === 'pending').length;
+  const skippedTotalCount = bookings.filter(bk => bk.status === 'no-show' || bk.status === 'No Show' || (bk as any).status === 'skipped').length;
+  const completedTotalCount = bookings.filter(bk => bk.status === 'completed').length;
 
   const getPaymentBadge = (status?: PaymentStatus) => {
     const s = String(status || '').toLowerCase();
@@ -261,55 +305,6 @@ export default function AppointmentsList({
       default:
         return <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold uppercase">Pending</span>;
     }
-  };
-
-  const exportToCSV = () => {
-    const headers = [
-      'Booking ID',
-      'Patient Name',
-      'Phone',
-      'Email',
-      'Booking Date',
-      'Time Slot',
-      'Service',
-      'Booking Status',
-      'Payment Status',
-      'Amount Paid (INR)',
-      'Razorpay Order ID',
-      'Razorpay Payment ID',
-      'Paid At'
-    ];
-
-    const rows = filteredBookings.map(bk => [
-      bk.id,
-      `"${bk.name.replace(/"/g, '""')}"`,
-      bk.phone,
-      bk.email || '',
-      bk.date,
-      bk.time,
-      `"${bk.service.replace(/"/g, '""')}"`,
-      bk.status,
-      bk.paymentStatus || 'Pending',
-      bk.amountPaid || (bk.paymentStatus === 'Paid' ? 500 : 0),
-      bk.razorpayOrderId || '',
-      bk.razorpayPaymentId || '',
-      bk.paidAt || ''
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `skinhub_payments_export_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return (
@@ -463,12 +458,6 @@ export default function AppointmentsList({
           </div>
 
           <button
-            onClick={exportToCSV}
-            className="text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200 rounded-xl px-3 py-2 hover:bg-teal-100 transition-colors cursor-pointer"
-          >
-            Export CSV
-          </button>
-          <button
             onClick={onRefresh}
             disabled={loading}
             className="text-xs font-bold bg-gray-50 text-primary border rounded-xl px-3 py-2 hover:bg-gray-100 transition-colors"
@@ -503,12 +492,13 @@ export default function AppointmentsList({
         {[
           { id: 'today', label: "Today's" },
           { id: 'upcoming', label: 'Upcoming' },
+          { id: 'completed', label: `Completed (${completedTotalCount})` },
+          { id: 'skipped', label: `Skipped (${skippedTotalCount})` },
+          { id: 'cancelled', label: 'Cancelled' },
           { id: 'online', label: 'Online Consultation' },
           { id: 'offline', label: 'Offline Consultation' },
           { id: 'paid', label: 'Paid' },
           { id: 'pending', label: 'Pending Payment' },
-          { id: 'completed', label: 'Completed' },
-          { id: 'cancelled', label: 'Cancelled' },
           { id: 'all', label: 'All Records' },
         ].map((f) => (
           <button
@@ -671,9 +661,52 @@ export default function AppointmentsList({
                                         }
                                       }}
                                       className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
-                                      title="Send Video Link via WhatsApp"
+                                      title={bk.phone ? "Send Video Link via WhatsApp" : "No WhatsApp number provided"}
                                     >
-                                      Send Link
+                                      {bk.phone ? 'Send Link' : 'No WA'}
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        let email = bk.email;
+                                        if (!email || !email.includes('@')) {
+                                          const entered = prompt(`Patient ${bk.name} has no email registered. Please enter an email address to send video consultation link:`);
+                                          if (!entered || !entered.includes('@')) return;
+                                          email = entered.trim();
+                                        }
+                                        const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
+                                        try {
+                                          const res = await fetch('/api/communication/send-email', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                              to: email,
+                                              patientName: bk.name,
+                                              type: 'meeting-link',
+                                              appointmentId: bk.id,
+                                              date: bk.date,
+                                              time: bk.time,
+                                              meetingUrl: finalLink
+                                            })
+                                          });
+                                          if (res.ok) {
+                                            alert(`✉️ Video consultation link successfully emailed to ${email}!`);
+                                            try {
+                                              await onAction(bk.id, 'mark-link-sent');
+                                              onRefresh();
+                                            } catch {}
+                                          } else {
+                                            const d = await res.json().catch(() => ({}));
+                                            alert(d.error || 'Failed to send email.');
+                                          }
+                                        } catch (e) {
+                                          console.error(e);
+                                          alert('Error sending email.');
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                                      title={bk.email ? `Send Video Link via Email (${bk.email})` : "Send Video Link via Email"}
+                                    >
+                                      <Mail className="w-3 h-3" /> Email Link
                                     </button>
                                   </>
                                 )}
@@ -684,6 +717,27 @@ export default function AppointmentsList({
                                     title="Complete Session"
                                   >
                                     Complete
+                                  </button>
+                                )}
+                                {bk.status === 'completed' && (
+                                  <button
+                                    onClick={() => window.open(`/admin/prescription?patientId=${bk.id}&type=${bk.bookingType === 'online' ? 'telemedicine' : 'clinic'}`, '_blank')}
+                                    className="px-2.5 py-1 bg-[#0B1B29] hover:bg-primary text-white rounded-lg text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="Ready / Write Prescription"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    Write Rx
+                                  </button>
+                                )}
+
+                                {hasCaseFile(bk) && (
+                                  <button
+                                    onClick={() => window.open(`/prescription/view?id=${bk.id}`, '_blank')}
+                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+                                    title="View Patient's Completed Case File & Prescription Pad"
+                                  >
+                                    <Eye className="w-3 h-3 text-emerald-600" />
+                                    <span>View Case File</span>
                                   </button>
                                 )}
 
@@ -710,7 +764,7 @@ export default function AppointmentsList({
                                     {/* Column 1: Patient Diagnostic Details */}
                                     <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-3">
                                       <p className="text-[10px] font-black uppercase text-primary tracking-wider">Patient Intake Details</p>
-                                      
+
                                       <div className="space-y-1.5 text-xs">
                                         {bk.age && (
                                           <div className="flex justify-between items-center py-1 border-b border-gray-100">
@@ -808,7 +862,18 @@ export default function AppointmentsList({
                                           >
                                             <MessageCircle className="w-3 h-3" /> WhatsApp Thank You
                                           </button>
-                                        ) : (
+                                        ) : bk.status === 'cancelled' ? (
+                                          <button
+                                            onClick={() => {
+                                              const msg = `*🌟 Skin Hub Clinic — Appointment Cancellation Notice* ❌\n\nNamaste *${bk.name}*! 🙏\n\nAapka appointment (ID: #${bk.id}) scheduled for *${bk.date}* at *${bk.time}* cancel kar diya gaya hai.\n\nAgar aap naya appointment slot book karna chahte hain to kripya hamari website visit karein ya clinic desk se sampark karein.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad!\n*Team Skin Hub* 🙏`;
+                                              const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                                              window.open(waUrl, '_blank');
+                                            }}
+                                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <MessageCircle className="w-3 h-3" /> WhatsApp Cancellation Notice
+                                          </button>
+                                        ) : (bk.status === 'confirmed' || bk.status === 'booked' || bk.status === 'arrived') ? (
                                           <button
                                             onClick={() => {
                                               const msg = `*🌟 Skin Hub Clinic — Appointment Reminder ⏰*\n\nNamaste *${bk.name}*! 🙏\n\nYahi ek chhota sa reminder hai aapke upcoming appointment ke liye:\n\n*📋 Booking Details:*\n• *Booking ID:* #${bk.id}\n• *Service:* ${bk.service}\n• *Date:* ${bk.date}\n• *Time:* ${bk.time}\n\n⏰ Kripya apne scheduled slot se 10 minutes pehle clinic (Rishi Nagar, Ujjain) pahunche.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad!\n*Team Skin Hub* 🙏`;
@@ -819,13 +884,13 @@ export default function AppointmentsList({
                                           >
                                             <MessageCircle className="w-3 h-3" /> WhatsApp Reminder
                                           </button>
-                                        )}
+                                        ) : null}
 
                                         {/* Reschedule */}
                                         {bk.status !== 'cancelled' && bk.status !== 'completed' && (
                                           <button
-                                            onClick={() => setShowRescheduleInput({ ...showRescheduleInput, [bk.id]: true })}
-                                            className="px-3 py-1.5 bg-[#1B4F72] hover:brightness-110 text-white rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                            onClick={() => setRescheduleBookingTarget(bk)}
+                                            className="px-3 py-1.5 bg-[#1B4F72] hover:brightness-110 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
                                           >
                                             <Clock className="w-3 h-3" /> Reschedule
                                           </button>
@@ -834,8 +899,8 @@ export default function AppointmentsList({
                                         {/* Cancel */}
                                         {bk.status !== 'cancelled' && bk.status !== 'completed' && (
                                           <button
-                                            onClick={() => onAction(bk.id, 'cancel')}
-                                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                            onClick={() => handleActionWithWA(bk.id, 'cancel', undefined, undefined, undefined, undefined, bk.name)}
+                                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
                                           >
                                             <XCircle className="w-3 h-3" /> Cancel
                                           </button>
@@ -854,32 +919,6 @@ export default function AppointmentsList({
                                     </div>
 
                                   </div>
-
-                                  {/* MongoDB Document Inspector matching Compass view (Doctors Only) */}
-                                  {role === 'doctor' && (
-                                    <div className="bg-[#0B1B29] text-emerald-400 p-4 rounded-xl font-mono text-[11px] overflow-x-auto border border-gray-800 space-y-1 shadow-inner mt-3">
-                                      <div className="flex items-center justify-between text-gray-400 text-[10px] pb-2 border-b border-gray-800 mb-2">
-                                        <span className="flex items-center gap-1 font-bold text-emerald-300">
-                                          🍃 MongoDB Document: skinhub.bookings ({bk.name})
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={() => navigator.clipboard.writeText(JSON.stringify(bk, null, 2))}
-                                          className="text-[10px] text-teal-300 hover:text-white underline cursor-pointer"
-                                        >
-                                          Copy Document JSON
-                                        </button>
-                                      </div>
-                                      {Object.entries(bk).map(([key, val]) => (
-                                        <div key={key} className="flex gap-2 py-0.5 border-b border-gray-800/30">
-                                          <span className="text-gray-400 min-w-[170px] shrink-0 font-bold">{key} :</span>
-                                          <span className={typeof val === 'number' || typeof val === 'boolean' ? 'text-blue-300 font-bold' : 'text-emerald-300'}>
-                                            {typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val)}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
 
                                   {/* Reschedule Form if open */}
                                   {showRescheduleInput[bk.id] && (
@@ -900,23 +939,37 @@ export default function AppointmentsList({
                                       className="p-3 bg-blue-50/50 border border-blue-200 rounded-xl space-y-2 text-xs"
                                     >
                                       <p className="font-bold text-primary text-[11px]">Reschedule Appointment Slot</p>
-                                      <div className="grid grid-cols-3 gap-2">
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                         <input
                                           required
                                           type="date"
                                           min={todayStr}
                                           value={rescheduleDates[bk.id] || ''}
-                                          onChange={(e) => setRescheduleDates({ ...rescheduleDates, [bk.id]: e.target.value })}
-                                          className="p-2 border rounded-lg text-xs"
+                                          onChange={(e) => handleDateChangeForReschedule(bk.id, e.target.value, bk.bookingType)}
+                                          className="p-2 border rounded-lg text-xs font-semibold"
                                         />
-                                        <input
-                                          required
-                                          type="text"
-                                          placeholder="e.g. 10:30 AM"
-                                          value={rescheduleTimes[bk.id] || ''}
-                                          onChange={(e) => setRescheduleTimes({ ...rescheduleTimes, [bk.id]: e.target.value })}
-                                          className="p-2 border rounded-lg text-xs"
-                                        />
+                                        {availableSlotsByBooking[bk.id] && availableSlotsByBooking[bk.id].length > 0 ? (
+                                          <select
+                                            required
+                                            value={rescheduleTimes[bk.id] || ''}
+                                            onChange={(e) => setRescheduleTimes({ ...rescheduleTimes, [bk.id]: e.target.value })}
+                                            className="p-2 border rounded-lg text-xs font-bold text-primary bg-white"
+                                          >
+                                            <option value="">Select Free Slot</option>
+                                            {availableSlotsByBooking[bk.id].map((t) => (
+                                              <option key={t} value={t}>{t}</option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <input
+                                            required
+                                            type="text"
+                                            placeholder="e.g. 10:30 AM"
+                                            value={rescheduleTimes[bk.id] || ''}
+                                            onChange={(e) => setRescheduleTimes({ ...rescheduleTimes, [bk.id]: e.target.value })}
+                                            className="p-2 border rounded-lg text-xs"
+                                          />
+                                        )}
                                         <input
                                           required
                                           type="text"
@@ -1117,9 +1170,52 @@ export default function AppointmentsList({
                               }
                             }}
                             className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
-                            title="Send Video Link via WhatsApp"
+                            title={bk.phone ? "Send Video Link via WhatsApp" : "No WhatsApp number provided"}
                           >
-                            Send Link
+                            {bk.phone ? 'Send Link' : 'No WA'}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              let email = bk.email;
+                              if (!email || !email.includes('@')) {
+                                const entered = prompt(`Patient ${bk.name} has no email registered. Please enter an email address to send video consultation link:`);
+                                if (!entered || !entered.includes('@')) return;
+                                email = entered.trim();
+                              }
+                              const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
+                              try {
+                                const res = await fetch('/api/communication/send-email', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    to: email,
+                                    patientName: bk.name,
+                                    type: 'meeting-link',
+                                    appointmentId: bk.id,
+                                    date: bk.date,
+                                    time: bk.time,
+                                    meetingUrl: finalLink
+                                  })
+                                });
+                                if (res.ok) {
+                                  alert(`✉️ Video consultation link successfully emailed to ${email}!`);
+                                  try {
+                                    await onAction(bk.id, 'mark-link-sent');
+                                    onRefresh();
+                                  } catch {}
+                                } else {
+                                  const d = await res.json().catch(() => ({}));
+                                  alert(d.error || 'Failed to send email.');
+                                }
+                              } catch (e) {
+                                console.error(e);
+                                alert('Error sending email.');
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                            title={bk.email ? `Send Video Link via Email (${bk.email})` : "Send Video Link via Email"}
+                          >
+                            <Mail className="w-3.5 h-3.5" /> Email Link
                           </button>
                         </>
                       )}
@@ -1129,6 +1225,33 @@ export default function AppointmentsList({
                           className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold uppercase cursor-pointer animate-none"
                         >
                           Complete
+                        </button>
+                      )}
+                      {bk.status === 'completed' && (
+                        <button
+                          onClick={() => window.open(`/admin/prescription?patientId=${bk.id}&type=${bk.bookingType === 'online' ? 'telemedicine' : 'clinic'}`, '_blank')}
+                          className="px-3 py-1.5 bg-[#0B1B29] hover:bg-primary text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Ready / Write Prescription"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> Write Rx
+                        </button>
+                      )}
+                      {hasCaseFile(bk) && (
+                        <button
+                          onClick={() => window.open(`/prescription/view?id=${bk.id}`, '_blank')}
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                          title="View Patient's Completed Case File & Prescription Pad"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-emerald-600" /> View Case File
+                        </button>
+                      )}
+                      {bk.status !== 'cancelled' && bk.status !== 'completed' && (
+                        <button
+                          onClick={() => setRescheduleBookingTarget(bk)}
+                          className="px-3 py-1.5 bg-[#1B4F72] hover:bg-[#0B1B29] text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                          title="Reschedule Appointment"
+                        >
+                          <Clock className="w-3.5 h-3.5" /> Reschedule
                         </button>
                       )}
                       {bk.paymentStatus === 'paid' && (
@@ -1196,6 +1319,60 @@ export default function AppointmentsList({
         </>
       )}
 
-    </div >
+      {/* FULL RESCHEDULE MODAL */}
+      <RescheduleModal
+        booking={rescheduleBookingTarget}
+        isOpen={!!rescheduleBookingTarget}
+        onClose={() => setRescheduleBookingTarget(null)}
+        onSuccess={(res) => {
+          setRescheduleBookingTarget(null);
+          onRefresh();
+          if (res?.whatsappUrl) {
+            setWhatsappModal({
+              url: res.whatsappUrl,
+              patientName: rescheduleBookingTarget?.name || 'Patient',
+              action: 'Rescheduled',
+            });
+          }
+        }}
+      />
+
+      {/* WHATSAPP MODAL */}
+      {whatsappModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 text-center space-y-4 animate-[fadeIn_0.2s_ease-out]">
+            <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto">
+              <MessageCircle className="w-6 h-6" />
+            </div>
+            <h4 className="font-playfair text-lg font-bold text-gray-900">
+              WhatsApp Notification Ready
+            </h4>
+            <p className="text-xs text-gray-600 leading-relaxed font-semibold">
+              Action has been updated in database. Send confirmation to <strong>{whatsappModal.patientName}</strong> on WhatsApp?
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setWhatsappModal(null)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(whatsappModal.url, '_blank');
+                  setWhatsappModal(null);
+                }}
+                className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" /> Open WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
   );
 }

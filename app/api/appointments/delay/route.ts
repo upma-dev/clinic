@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     }).toArray();
 
     // 2. Broadcast live queue delay message
-    const delayMsg = `Dr. ${settings.doctorName || 'Prateek Tiwari'} is running delayed by ${delayMinutes} minutes today. We apologize for the inconvenience.`;
+    const delayMsg = `Dr. Prateek Tiwari is running delayed by ${delayMinutes} minutes today. We apologize for the inconvenience.`;
     await updateDailyQueue(todayStr, {
       message: delayMsg,
       lastUpdated: new Date().toISOString()
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     await createNotification(
       'queue_update',
       'Doctor Schedule Delayed',
-      `Dr. ${settings.doctorName || 'Prateek Tiwari'} declared a schedule delay of ${delayMinutes} minutes today.`
+      `Dr. Prateek Tiwari declared a schedule delay of ${delayMinutes} minutes today.`
     );
 
     // 3. Send automated emails to patients
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
         await sendAutomatedEmail(b.email, 'doctorDelayed', {
           name: b.name,
           delayMinutes,
-          doctorName: settings.doctorName || 'Dr. Prateek Tiwari'
+          doctorName: 'Dr. Prateek Tiwari'
         }).catch(err => console.error(`Failed to send delay email to ${b.email}:`, err));
         emailCount++;
       }

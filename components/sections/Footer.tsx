@@ -21,7 +21,7 @@ export default function Footer({ settings, cms }: FooterProps) {
   const currentYear = new Date().getFullYear();
 
   const clinicName = settings?.clinicName || siteConfig.clinicName;
-  const doctorName = cms?.aboutTitle || siteConfig.doctorName;
+  const doctorName = siteConfig.doctorName;
   const location = settings?.clinicAddress || cms?.contactAddress || siteConfig.location;
   const phone = settings?.clinicPhone || siteConfig.phone;
   const whatsapp = settings?.clinicPhone?.replace(/[^0-9]/g, '') || siteConfig.whatsapp;

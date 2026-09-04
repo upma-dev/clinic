@@ -116,6 +116,74 @@ export async function POST(req: NextRequest) {
         }
 
         const bookingId = booking.id;
+
+        // Check if slot has expired and was taken by another patient
+        const { isSlotTaken } = await import('@/lib/db/bookings');
+        const isConflict = await isSlotTaken(booking.date, booking.time, bookingId);
+
+        if (isConflict) {
+          let refundId = 'mock_ref_' + Date.now();
+          let refundStatus = 'mock_refunded';
+          const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID?.trim();
+          const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+          if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET && payId && !payId.startsWith('mock_') && !payId.startsWith('plink_paid_')) {
+            try {
+              const authStr = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+              const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${payId}/refund`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Basic ${authStr}`,
+                },
+                body: JSON.stringify({
+                  amount: Math.round(amount * 100),
+                  notes: {
+                    reason: 'Webhook Auto-refund: Slot conflict due to expired hold',
+                    bookingId: bookingId,
+                  },
+                }),
+              });
+              if (refundRes.ok) {
+                const refData = await refundRes.json();
+                refundId = refData.id;
+                refundStatus = 'processed';
+              } else {
+                refundStatus = 'pending_manual_review';
+              }
+            } catch (refErr) {
+              console.error('Webhook auto-refund error:', refErr);
+              refundStatus = 'pending_manual_review';
+            }
+          }
+
+          await db.collection(COLLECTIONS.bookings).updateOne(
+            { id: bookingId },
+            {
+              $set: {
+                paymentStatus: 'Paid',
+                status: 'cancelled',
+                slotConflict: true,
+                cancellationReason: 'Slot conflict: Payment captured after 15-minute hold expired. Slot was taken by another patient.',
+                razorpayPaymentId: payId,
+                amountPaid: amount,
+                refundId,
+                refundStatus,
+                refundedAt: new Date().toISOString(),
+              },
+              $unset: { holdExpiresAt: "" }
+            }
+          );
+
+          await createNotification(
+            'booking_cancelled',
+            '⚠️ Webhook Slot Conflict - Auto-Refund Triggered',
+            `${booking.name}'s payment of ₹${amount} was captured after slot timeout (${booking.time} on ${booking.date}). Slot already taken. Refund: ${refundStatus}.`
+          );
+
+          return NextResponse.json({ success: true, message: 'Slot conflict handled, refund initiated' });
+        }
+
         const nextStatus = 'Confirmed';
 
         // 1. Update payment details
@@ -135,34 +203,36 @@ export async function POST(req: NextRequest) {
         }
         await db.collection(COLLECTIONS.bookings).updateOne(
           { id: bookingId },
-          { $set: updateFields }
+          { 
+            $set: updateFields,
+            $unset: { holdExpiresAt: "" }
+          }
         );
 
         let tokenNumber = undefined;
-        const todayStr = todayISO();
+        const queueDate = booking.date || todayISO();
 
-        // 3. Issue queue token if slot is today (only for offline/physical visits)
-        if (booking.date === todayStr && booking.bookingType !== 'online') {
-          const { getNextTokenNumber, addQueueEntry } = await import('@/lib/db/queue');
-          tokenNumber = await getNextTokenNumber(todayStr);
+        // 3. Issue queue token and add entry to live queue
+        const { getNextTokenNumber, addQueueEntry } = await import('@/lib/db/queue');
+        tokenNumber = await getNextTokenNumber(queueDate);
 
-          await db.collection(COLLECTIONS.bookings).updateOne(
-            { id: bookingId },
-            { $set: { tokenNumber } }
-          );
+        await db.collection(COLLECTIONS.bookings).updateOne(
+          { id: bookingId },
+          { $set: { tokenNumber } }
+        );
 
-          await addQueueEntry({
-            date: todayStr,
-            tokenNumber,
-            name: booking.name,
-            phone: booking.phone,
-            source: booking.source || 'online',
-            bookingId,
-            status: 'waiting',
-            estimatedWaitMinutes: 0,
-            createdAt: new Date().toISOString(),
-          });
-        }
+        await addQueueEntry({
+          date: queueDate,
+          tokenNumber,
+          name: booking.name,
+          phone: booking.phone,
+          source: booking.source || 'online',
+          bookingId,
+          status: 'waiting',
+          estimatedWaitMinutes: 0,
+          scheduledTime: booking.time,
+          createdAt: new Date().toISOString(),
+        });
 
         // 4. Log notification
         await createNotification(

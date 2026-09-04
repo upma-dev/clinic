@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     const payStatus = booking.paymentStatus || 'Pending';
     const bookStatus = booking.status || 'Pending';
-    const amt = booking.amountPaid || (
+    const amt = booking.amountPaid || booking.amount || (
       booking.bookingType === 'online'
         ? (settings.onlineConsultationFee || settings.consultationFee || 600)
         : (settings.offlineConsultationFee || settings.consultationFee || 700)

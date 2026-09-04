@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, FileText, Camera, History, CheckCircle, Video, Activity, RefreshCw, Printer, Download } from 'lucide-react';
+import { ChevronLeft, FileText, Camera, History, CheckCircle, Video, Activity, RefreshCw, Printer, Download, Eye } from 'lucide-react';
 import ConsultationForm from './ConsultationForm';
 import { PDFService } from '@/lib/services/PDFService';
 
@@ -49,11 +49,7 @@ export default function DigitalPatientCaseFile({ appointment, onBack, readOnly =
     : (currentConsultation ? [{ appointment, consultation: currentConsultation, questionnaire: currentQuestionnaire }] : []);
 
   const openPdf = (consultationObj?: any) => {
-    const targetConsultation = consultationObj || currentConsultation || { 
-      diagnosis: 'Acne Vulgaris (Severe Cystic Acne)', 
-      prescriptionText: '1. Tab Doxycycline 100mg - 1 tab daily after lunch for 14 days\n2. Adapalene 0.1% Gel - Apply at night\n3. Sunscreen SPF 50 - Apply during daytime' 
-    };
-    PDFService.openPrescription(appointment, targetConsultation as any);
+    window.open(`/prescription/view?id=${appointment._id || appointment.id}`, '_blank');
   };
 
   return (
@@ -81,12 +77,30 @@ export default function DigitalPatientCaseFile({ appointment, onBack, readOnly =
         </div>
 
         <div className="flex gap-2 items-center">
-          {(appointment.status === 'completed' || currentConsultation) && (
+          <button
+            onClick={() => window.open(`/admin/prescription?patientId=${appointment._id || appointment.id}&type=telemedicine`, '_blank')}
+            className="px-4 py-2 bg-[#0B1B29] hover:bg-primary text-white font-bold text-xs uppercase tracking-wide rounded-xl flex items-center gap-2 transition cursor-pointer shadow-md"
+            title="Write / Ready Prescription (like Pre-Paid Log)"
+          >
+            <FileText className="w-4 h-4" /> Write Rx
+          </button>
+
+          {Boolean(
+            (appointment as any)?.hasCaseFile === true ||
+            (appointment as any)?.prescriptionSent === true ||
+            (appointment as any)?.caseFileSent === true ||
+            ((appointment as any)?.prescriptionPdfBase64 && String((appointment as any)?.prescriptionPdfBase64).length > 50) ||
+            ((appointment as any)?.prescriptionData && (
+              (typeof (appointment as any)?.prescriptionData?.medicines === 'string' && (appointment as any)?.prescriptionData?.medicines.trim().length > 0) ||
+              (typeof (appointment as any)?.prescriptionData?.advice === 'string' && (appointment as any)?.prescriptionData?.advice.trim().length > 0)
+            ))
+          ) && (
             <button
-              onClick={() => openPdf()}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition cursor-pointer shadow-md"
+              onClick={() => window.open(`/prescription/view?id=${appointment._id || appointment.id}`, '_blank')}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wide rounded-xl flex items-center gap-2 transition cursor-pointer shadow-md"
+              title="View Completed Prescription Pad & Case File"
             >
-              <Printer className="w-4 h-4" /> Download / Print PDF
+              <Eye className="w-4 h-4" /> View Case File
             </button>
           )}
 

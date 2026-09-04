@@ -8,18 +8,23 @@ import {
 import { getClinicSettings } from "@/lib/db/settings";
 import { addQueueEntry, getNextTokenNumber } from "@/lib/db/queue";
 import { createNotification } from "@/lib/db/notifications";
-import { isBookingClosedForDate } from "@/lib/slots";
+import { isBookingClosedForDate, timeToMinutes, parseHHMM } from "@/lib/slots";
 import type { Booking } from "@/lib/types";
 import { getDb, COLLECTIONS } from "@/lib/mongodb";
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { getAllBookings } = await import("@/lib/db/bookings");
-  const list = await getAllBookings();
+  const dateParam = req.nextUrl.searchParams.get('date');
+  const limitParam = req.nextUrl.searchParams.get('limit');
+  const parsedLimit = limitParam ? Math.max(1, parseInt(limitParam, 10)) : 2000;
+  const { getAllBookings, getAllBookingsForDate } = await import("@/lib/db/bookings");
+  const list = dateParam ? await getAllBookingsForDate(dateParam) : await getAllBookings(parsedLimit);
 
   // Auto-sync pending payment links with Razorpay directly on poll
   try {
@@ -50,6 +55,8 @@ export async function GET() {
               if (payData.status === 'paid') {
                 const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
                 const paidTime = new Date().toISOString();
+                const { addQueueEntry, getNextTokenNumber } = await import('@/lib/db/queue');
+                const tokenNumber = await getNextTokenNumber(booking.date);
 
                 // Update database
                 await db.collection(COLLECTIONS.bookings).updateOne(
@@ -58,6 +65,7 @@ export async function GET() {
                     $set: { 
                       paymentStatus: 'paid',
                       status: 'confirmed',
+                      tokenNumber,
                       razorpayPaymentId: payData.payments?.[0]?.payment_id || 'auto_verify',
                       amountPaid: payData.amount_paid / 100,
                       paidAt: paidTime,
@@ -68,11 +76,24 @@ export async function GET() {
                   }
                 );
 
+                await addQueueEntry({
+                  date: booking.date,
+                  tokenNumber,
+                  name: booking.name,
+                  phone: booking.phone,
+                  source: booking.source || 'online',
+                  bookingId: booking.id,
+                  status: 'waiting',
+                  estimatedWaitMinutes: 0,
+                  scheduledTime: booking.time,
+                  createdAt: new Date().toISOString(),
+                });
+
                 // Create notification
                 await createNotification(
                   'payment_received',
                   'Online Payment Verified (Auto)',
-                  `${booking.name} paid Rs. ${payData.amount_paid / 100} online. Video link generated.`
+                  `${booking.name} paid Rs. ${payData.amount_paid / 100} online. Video link generated.${tokenNumber ? ` Token #${tokenNumber}` : ''}`
                 );
 
                 // Update in-memory list for immediate return
@@ -80,6 +101,7 @@ export async function GET() {
                 if (match) {
                   match.paymentStatus = 'paid';
                   match.status = 'confirmed';
+                  match.tokenNumber = tokenNumber;
                   match.amountPaid = payData.amount_paid / 100;
                   match.meetingLink = `https://meet.ffmuc.net/SkinHubClinic-${booking.id}`;
                   match.meetingPassword = roomPass;
@@ -97,6 +119,10 @@ export async function GET() {
     console.error('Error during auto-sync of payment links:', err);
   }
 
+  const headers = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  };
+
   if (session.role === "staff") {
     // Sanitize bookings for staff: delete sensitive clinical fields
     const sanitized = list.map((b: Booking) => {
@@ -111,10 +137,10 @@ export async function GET() {
       } = b;
       return rest;
     });
-    return NextResponse.json(sanitized);
+    return NextResponse.json(sanitized, { headers });
   }
 
-  return NextResponse.json(list);
+  return NextResponse.json(list, { headers });
 }
 
 export async function POST(req: NextRequest) {
@@ -149,17 +175,6 @@ export async function POST(req: NextRequest) {
 
     const settings = await getClinicSettings();
 
-    // 1. Verify online booking toggle
-    if (!settings.enableOnlineBooking) {
-      return NextResponse.json(
-        {
-          error:
-            "Online booking is temporarily disabled. Please contact the clinic.",
-        },
-        { status: 403 },
-      );
-    }
-
     // 2. Verify closing cut-off
     if (isBookingClosedForDate(date, settings)) {
       return NextResponse.json(
@@ -191,21 +206,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Verify daily capacity limit
-    const total = await countBookingsForDate(date);
-    const maxLimit =
-      settings.onlineMaxDailyBooking || settings.maxBookingsPerDay;
-    if (total >= maxLimit) {
-      return NextResponse.json(
-        { error: "Fully booked for this day. Please choose another date." },
-        { status: 403 },
-      );
-    }
+
 
     // 5. Verify blocked slot
-    const blocked = settings.blockedSlots?.some(
-      (s) => s.date === date && s.time === time,
-    );
+    const blocked = settings.blockedSlots?.some((s) => {
+      if (s.date !== date) return false;
+      const slotMin = timeToMinutes(time);
+      if (s.time.includes('-')) {
+        const [start, end] = s.time.split('-').map(t => t.trim());
+        const startMin = parseHHMM(start);
+        const endMin = parseHHMM(end);
+        return slotMin >= startMin && slotMin <= endMin;
+      }
+      const blockedMin = s.time.includes('AM') || s.time.includes('PM') || s.time.includes('am') || s.time.includes('pm')
+        ? timeToMinutes(s.time)
+        : parseHHMM(s.time);
+      return slotMin === blockedMin;
+    });
     if (blocked) {
       return NextResponse.json(
         { error: "This slot is blocked by the doctor." },
@@ -213,10 +230,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 6. Verify slot availability
+    // 6. Verify slot availability (IRCTC-style atomic hold check)
     if (await isSlotTaken(date, time)) {
       return NextResponse.json(
-        { error: "This time slot is already booked. Please pick another." },
+        {
+          error: "This time slot was just reserved by another patient. Please select another slot.",
+          code: "SLOT_UNAVAILABLE",
+          slotTaken: true,
+        },
         { status: 409 },
       );
     }
@@ -240,6 +261,11 @@ export async function POST(req: NextRequest) {
       paymentStatus = "pending";
     }
 
+    // Assign 15-minute temporary hold timer for online payment checkouts
+    const holdExpiresAt = requiresPayment
+      ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      : undefined;
+
     const newBooking: Booking = {
       id: appointmentId,
       name,
@@ -255,14 +281,16 @@ export async function POST(req: NextRequest) {
       source: "online",
       paymentStatus: paymentStatus as any,
       createdAt: new Date().toISOString(),
+      holdExpiresAt,
       gender,
       age: age ? Number(age) : undefined,
       address,
-      skinType: skinType || 'Normal',
+      skinType: bookingType === 'online' ? skinType : undefined,
       problemDescription,
       previousMedication,
       images,
       appointmentNotes,
+      amount: fee,
     };
 
     await createBooking(newBooking);
@@ -286,7 +314,7 @@ export async function POST(req: NextRequest) {
       bookingType === "offline"
         ? "New Clinic Visit Request"
         : requiresPayment
-          ? "Pending Payment Booking"
+          ? "Pending Payment Booking (15-min hold active)"
           : "Confirmed Booking",
       `${name} - Slot: ${time} (${service})`,
     );
@@ -332,9 +360,11 @@ export async function POST(req: NextRequest) {
       whatsappUrl,
       status: initialStatus,
       requiresPayment,
+      holdExpiresAt,
       fee,
     });
   } catch (err: unknown) {
+    console.error('Error in POST /api/appointments:', err);
     const message = err instanceof Error ? err.message : "Booking failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

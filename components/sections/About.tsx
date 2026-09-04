@@ -34,18 +34,14 @@ const defaultCredentials = [
 ];
 
 export default function About({ cms }: AboutProps) {
-  const doctorName = cms?.aboutTitle || siteConfig.doctorName;
-  const credentialsText = cms?.aboutSubtitle || siteConfig.credentials;
-  const aboutDescription = cms?.aboutDescription || "With over 12 years of dedicated practice in dermatology and cosmetology, Dr. Prateek Tiwari has helped thousands of patients across Ujjain and Madhya Pradesh achieve healthier skin and restored confidence. His patient-first philosophy combines evidence-based medicine with modern aesthetic science.";
-  const doctorImage = cms?.aboutDoctorImage || "/assets/doctor.jpeg";
+  const doctorName = siteConfig.doctorName;
+  const credentialsText = siteConfig.credentials;
+  const aboutDescription = "With over 12 years of dedicated practice in dermatology and cosmetology, Dr. Prateek Tiwari has helped thousands of patients across Ujjain and Madhya Pradesh achieve healthier skin and restored confidence. His patient-first philosophy combines evidence-based medicine with modern aesthetic science.";
+  const doctorImage = "/assets/doctor.png";
 
-  const statsList = cms?.aboutStats?.map((s, idx) => ({
-    icon: idx === 0 ? <Clock className="w-5 h-5" /> : idx === 1 ? <Users className="w-5 h-5" /> : idx === 2 ? <Award className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />,
-    value: s.value,
-    label: s.label
-  })) || defaultStats;
+  const statsList = defaultStats;
 
-  const credentialsList = cms?.aboutCredentials || defaultCredentials;
+  const credentialsList = defaultCredentials;
 
   return (
     <section id="about" className="py-12 sm:py-16 bg-white">

@@ -6,27 +6,52 @@ import { siteConfig } from '@/config/site';
 import type { SlotAvailability, ClinicSettings } from '@/lib/types';
 import { todayISO } from '@/lib/slots';
 
-export default function BookingForm() {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [service, setService] = useState('');
-  const [date, setDate] = useState(todayISO());
-  const [time, setTime] = useState('');
-  const [message, setMessage] = useState('');
-  const [bookingType, setBookingType] = useState<'online' | 'offline'>('online');
-  const [payOnline, setPayOnline] = useState(true);
+interface BookingFormProps {
+  rescheduleBooking?: any | null;
+  onSuccess?: (res?: any) => void;
+  onCancel?: () => void;
+}
+
+export default function BookingForm({ rescheduleBooking, onSuccess, onCancel }: BookingFormProps = {}) {
+  const [name, setName] = useState(rescheduleBooking?.name || '');
+  const [phone, setPhone] = useState(rescheduleBooking?.phone || '');
+  const [email, setEmail] = useState(rescheduleBooking?.email || '');
+  const [service, setService] = useState(rescheduleBooking?.service || '');
+  const [date, setDate] = useState(rescheduleBooking?.date || todayISO());
+  const [time, setTime] = useState(rescheduleBooking?.time || '');
+  const [message, setMessage] = useState(rescheduleBooking?.message || '');
+  const [bookingType, setBookingType] = useState<'online' | 'offline'>(rescheduleBooking?.bookingType || 'online');
+  const [payOnline, setPayOnline] = useState(rescheduleBooking?.payOnline ?? true);
 
   // Patient Intake Details
-  const [gender, setGender] = useState('Male');
-  const [age, setAge] = useState('');
-  const [address, setAddress] = useState('');
-  const [skinType, setSkinType] = useState('Normal');
-  const [problemDescription, setProblemDescription] = useState('');
-  const [previousMedication, setPreviousMedication] = useState('');
-  const [appointmentNotes, setAppointmentNotes] = useState('');
+  const [gender, setGender] = useState(rescheduleBooking?.gender || 'Male');
+  const [age, setAge] = useState(rescheduleBooking?.age ? String(rescheduleBooking.age) : '');
+  const [address, setAddress] = useState(rescheduleBooking?.address || '');
+  const [skinType, setSkinType] = useState(rescheduleBooking?.skinType || 'Normal');
+  const [problemDescription, setProblemDescription] = useState(rescheduleBooking?.problemDescription || '');
+  const [previousMedication, setPreviousMedication] = useState(rescheduleBooking?.previousMedication || '');
+  const [appointmentNotes, setAppointmentNotes] = useState(rescheduleBooking?.appointmentNotes || '');
   const [uploadingFiles, setUploadingFiles] = useState(false);
-  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>(rescheduleBooking?.images || []);
+
+  useEffect(() => {
+    if (rescheduleBooking) {
+      if (rescheduleBooking.name) setName(rescheduleBooking.name);
+      if (rescheduleBooking.phone) setPhone(rescheduleBooking.phone);
+      if (rescheduleBooking.email) setEmail(rescheduleBooking.email);
+      if (rescheduleBooking.service) setService(rescheduleBooking.service);
+      if (rescheduleBooking.date) setDate(rescheduleBooking.date);
+      if (rescheduleBooking.time) setTime(rescheduleBooking.time);
+      if (rescheduleBooking.gender) setGender(rescheduleBooking.gender);
+      if (rescheduleBooking.age) setAge(String(rescheduleBooking.age));
+      if (rescheduleBooking.address) setAddress(rescheduleBooking.address);
+      if (rescheduleBooking.skinType) setSkinType(rescheduleBooking.skinType);
+      if (rescheduleBooking.problemDescription) setProblemDescription(rescheduleBooking.problemDescription);
+      if (rescheduleBooking.previousMedication) setPreviousMedication(rescheduleBooking.previousMedication);
+      if (rescheduleBooking.appointmentNotes) setAppointmentNotes(rescheduleBooking.appointmentNotes);
+      if (rescheduleBooking.bookingType) setBookingType(rescheduleBooking.bookingType);
+    }
+  }, [rescheduleBooking]);
 
   // Slots State
   const [slots, setSlots] = useState<SlotAvailability[]>([]);
@@ -51,8 +76,11 @@ export default function BookingForm() {
     token?: number;
     status?: string;
     paymentStatus?: string;
+    isReschedule?: boolean;
+    [key: string]: any;
   } | null>(null);
   const [errorText, setErrorText] = useState('');
+  const [holdCountdown, setHoldCountdown] = useState<number | null>(null);
 
   // Dynamic config parameters
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
@@ -114,6 +142,23 @@ export default function BookingForm() {
     fetchSlots();
   }, [date, bookingType]);
 
+  // 15-Minute Slot Hold Countdown Timer
+  useEffect(() => {
+    if (holdCountdown === null || holdCountdown <= 0) return;
+    const interval = setInterval(() => {
+      setHoldCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          fetchSlots();
+          setErrorText('Your 15-minute slot hold has expired. Please pick an available slot to retry.');
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [holdCountdown]);
+
   // Razorpay dynamic loading helper
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -169,6 +214,56 @@ export default function BookingForm() {
     }
 
     try {
+      if (rescheduleBooking) {
+        const res = await fetch('/api/appointments/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: rescheduleBooking.id,
+            action: 'reschedule',
+            newDate: date,
+            newTime: time,
+            name,
+            phone,
+            email,
+            service,
+            gender,
+            age,
+            address,
+            skinType: bookingType === 'online' ? skinType : undefined,
+            problemDescription,
+            previousMedication,
+            appointmentNotes,
+            reason: 'Patient updated booking details and rescheduled slot'
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 409 || data.error?.includes('already booked')) {
+            fetchSlots();
+            throw new Error(data.error || 'Yeh time slot pehle se booked hai. Kripya dusra time slot chunein.');
+          }
+          throw new Error(data.error || 'Reschedule failed');
+        }
+
+        setBookingResult({
+          bookingId: rescheduleBooking.id,
+          id: rescheduleBooking.id,
+          queueToken: rescheduleBooking.tokenNumber || null,
+          estimatedWaitMinutes: 0,
+          isOnlineConsultation: bookingType === 'online',
+          meetingLink: rescheduleBooking.meetingLink || undefined,
+          isReschedule: true,
+        });
+
+        if (onSuccess) {
+          onSuccess(data);
+        }
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,11 +289,20 @@ export default function BookingForm() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 409 || errData.slotTaken) {
+          fetchSlots(); // Automatically refresh slots to disable the taken slot
+          throw new Error(errData.error || 'Yeh time slot abhi-abhi kisi aur patient ne reserve kar liya hai. Kripya naya slot select karein.');
+        }
         throw new Error(errData.error || 'Booking failed');
       }
 
       const data = await res.json();
+
+      if (data.holdExpiresAt) {
+        const remaining = Math.max(0, Math.floor((new Date(data.holdExpiresAt).getTime() - Date.now()) / 1000));
+        setHoldCountdown(remaining);
+      }
 
       // If Razorpay checkout is needed
       if (data.requiresPayment) {
@@ -254,11 +358,19 @@ export default function BookingForm() {
                 }),
               });
 
+              const verifyData = await verifyRes.json().catch(() => ({}));
+
               if (!verifyRes.ok) {
-                throw new Error('Payment verification failed');
+                if (verifyRes.status === 409 && verifyData.conflict) {
+                  setErrorText(verifyData.message || 'Payment received, but slot hold expired and was allotted to another patient. A full refund has been initiated.');
+                  setHoldCountdown(null);
+                  fetchSlots();
+                  return;
+                }
+                throw new Error(verifyData.error || verifyData.message || 'Payment verification failed');
               }
 
-              const verifyData = await verifyRes.json();
+              setHoldCountdown(null);
               setBookingResult({
                 id: data.appointmentId,
                 token: verifyData.tokenNumber,
@@ -415,21 +527,7 @@ export default function BookingForm() {
 
   const minDate = new Date().toISOString().split('T')[0];
 
-  if (settings && !settings.enableOnlineBooking) {
-    return (
-      <section id="bookings" className="py-12 sm:py-16 bg-white select-text">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
-          <div className="w-16 h-16 rounded-full bg-rose-50 border border-rose-300 flex items-center justify-center mx-auto text-rose-700">
-            <AlertCircle className="w-8 h-8" />
-          </div>
-          <h2 className="font-playfair text-3xl font-bold text-gray-900 tracking-tight">Online Booking Suspended</h2>
-          <p className="font-sans text-gray-600 max-w-md mx-auto leading-relaxed font-semibold">
-            Online appointments are temporarily disabled. Please visit the clinic directly or call our reception desk at <strong>{settings.clinicPhone}</strong>.
-          </p>
-        </div>
-      </section>
-    );
-  }
+
 
   const slotDuration = settings?.onlineSlotDuration || settings?.slotDurationMinutes || 15;
   const cutoffTime = settings ? `${settings.bookingCutoffHour}:${String(settings.bookingCutoffMinute || 0).padStart(2, '0')}` : '07:30 PM';
@@ -486,6 +584,29 @@ export default function BookingForm() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Reschedule Banner */}
+        {rescheduleBooking && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between text-left shadow-sm">
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Rescheduling Appointment</p>
+                <p className="text-xs font-semibold mt-0.5">Booking Ref: <strong className="font-mono text-primary">#{rescheduleBooking.id}</strong> • Current Slot: <strong>{rescheduleBooking.date} ({rescheduleBooking.time})</strong></p>
+                <p className="text-[11px] text-amber-700 mt-0.5">You can update your personal details, problem notes, date, and choose any available slot below.</p>
+              </div>
+            </div>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-3.5 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                Cancel
+              </button>
+            )}
           </div>
         )}
 
@@ -772,23 +893,51 @@ export default function BookingForm() {
                       Booking closed for today (after {cutoffTime}). Select tomorrow.
                     </p>
                   ) : (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      {slots.map((slot) => (
-                        <button
-                          key={slot.time}
-                          type="button"
-                          disabled={slot.status !== 'available'}
-                          onClick={() => setTime(slot.time)}
-                          className={`py-2.5 px-1 rounded-lg text-[10px] font-bold border transition-all ${slot.status !== 'available'
-                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through'
-                            : time === slot.time
-                              ? 'bg-primary text-white border-primary ring-2 ring-primary/30'
-                              : 'bg-white text-gray-800 border-gray-300 hover:border-primary'
-                            }`}
-                        >
-                          {slot.time}
-                        </button>
-                      ))}
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-2 border border-gray-250 rounded-xl bg-gray-50/30 shadow-2xs">
+                        {slots.map((slot) => {
+                          const isAvailable = slot.status === 'available';
+                          const isBooked = slot.status === 'booked';
+                          const isBlocked = slot.status === 'blocked';
+                          
+                          return (
+                            <button
+                              key={slot.time}
+                              type="button"
+                              disabled={!isAvailable}
+                              title={isBlocked ? "Blocked by Doctor" : isBooked ? "Already Booked" : "Available"}
+                              onClick={() => setTime(slot.time)}
+                              className={`py-2.5 px-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                                isAvailable
+                                  ? time === slot.time
+                                    ? 'bg-primary text-white border-primary ring-2 ring-primary/30 shadow-xs'
+                                    : 'bg-white text-gray-800 border-gray-300 hover:border-primary'
+                                  : isBlocked
+                                    ? 'bg-rose-50 text-rose-500 border-rose-200 cursor-not-allowed'
+                                    : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through'
+                              }`}
+                            >
+                              {slot.time}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Legend Indicator */}
+                      <div className="flex items-center gap-4 mt-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 justify-center flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded bg-white border border-gray-300 shadow-2xs" />
+                          <span>Available</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded bg-gray-100 border border-gray-200 line-through" />
+                          <span>Booked</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded bg-rose-50 border border-rose-200" />
+                          <span>Blocked</span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -828,6 +977,20 @@ export default function BookingForm() {
                 </div>
               )}
 
+              {holdCountdown !== null && holdCountdown > 0 && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-amber-900 shadow-sm animate-pulse">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-600 animate-spin" />
+                    <span className="text-xs font-bold">
+                      Slot Reserved: Complete payment before timer expires
+                    </span>
+                  </div>
+                  <span className="text-xs font-black font-mono bg-amber-200 px-2.5 py-1 rounded-md text-amber-950">
+                    {Math.floor(holdCountdown / 60)}:{String(holdCountdown % 60).padStart(2, '0')}
+                  </span>
+                </div>
+              )}
+
               {errorText && (
                 <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-bold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 animate-bounce" />
@@ -838,9 +1001,15 @@ export default function BookingForm() {
               <button
                 type="submit"
                 disabled={loading || !time || fullyBooked || bookingClosed || isClosedDay || isHoliday}
-                className="w-full py-4 bg-[#1B4F72] hover:bg-teal-650 text-white font-sans font-bold text-xs sm:text-sm uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-md outline-none"
+                className="w-full py-4 bg-[#1B4F72] hover:bg-teal-650 text-white font-sans font-bold text-xs sm:text-sm uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-md outline-none transition-all"
               >
-                {loading ? <Clock className="w-5 h-5 animate-spin" /> : 'Confirm Booking Request'}
+                {loading ? (
+                  <Clock className="w-5 h-5 animate-spin" />
+                ) : rescheduleBooking ? (
+                  'Confirm Reschedule & Save Changes'
+                ) : (
+                  'Confirm Booking Request'
+                )}
               </button>
             </form>
           )}

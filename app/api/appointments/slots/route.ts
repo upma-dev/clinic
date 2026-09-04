@@ -1,9 +1,12 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import {
   countBookingsForDate,
   getBookedTimesForDate,
   getAllBookings,
+  cleanupExpiredUnpaidBookings,
 } from '@/lib/db/bookings';
 import { getClinicSettings } from '@/lib/db/settings';
 import { buildSlotAvailability } from '@/lib/slots';
@@ -19,10 +22,13 @@ export async function GET(req: NextRequest) {
     const typeParam = req.nextUrl.searchParams.get('type') || 'online';
     const type = (typeParam === 'offline' || typeParam === 'clinic') ? 'clinic' : 'online';
 
+    // Proactively clean up expired unpaid holds before checking slots
+    await cleanupExpiredUnpaidBookings();
+
     const settings = await getClinicSettings();
     const [bookedTimes, totalBookings] = await Promise.all([
       getBookedTimesForDate(date),
-      countBookingsForDate(date),
+      countBookingsForDate(date, type),
     ]);
 
     const blockedTimes = new Set(
@@ -38,13 +44,19 @@ export async function GET(req: NextRequest) {
       type
     );
 
-    return NextResponse.json({
-      date,
-      maxBookingsPerDay: settings.maxBookingsPerDay,
-      bookedCount: totalBookings,
-      cutoff: `${settings.bookingCutoffHour}:${String(settings.bookingCutoffMinute).padStart(2, '0')}`,
-      ...result,
-    });
+    return NextResponse.json(
+      {
+        date,
+        bookedCount: totalBookings,
+        cutoff: `${settings.bookingCutoffHour}:${String(settings.bookingCutoffMinute).padStart(2, '0')}`,
+        ...result,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        },
+      }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to load slots';
     return NextResponse.json({ error: message }, { status: 500 });

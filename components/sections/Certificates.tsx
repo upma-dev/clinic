@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Award, CheckCircle, X } from 'lucide-react';
+import { Award, CheckCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { CMSContent } from '@/lib/types';
 
 interface CertificatesProps {
@@ -29,7 +30,18 @@ export default function Certificates({ cms }: CertificatesProps) {
     : defaultCertificates;
 
   const [activeCertImage, setActiveCertImage] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
+  const prevSlide = () => {
+    setCurrentIndex((prev) => (prev === 0 ? certificates.length - 1 : prev - 1));
+  };
+
+  const nextSlide = () => {
+    setCurrentIndex((prev) => (prev === certificates.length - 1 ? 0 : prev + 1));
+  };
+
+  const certIndex = currentIndex >= certificates.length ? 0 : currentIndex;
+  const currentCert = certificates[certIndex];
 
   const activeCert = activeCertImage
     ? certificates.find((c) => c.image === activeCertImage) ?? null
@@ -52,40 +64,90 @@ export default function Certificates({ cms }: CertificatesProps) {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {certificates.map((cert) => (
-            <button
-              key={cert.id}
-              type="button"
-              onClick={() => setActiveCertImage(cert.image)}
-              className="text-left bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex items-center space-x-6 hover:shadow-md transition-shadow group"
-              aria-label={`Open certificate image: ${cert.title}`}
-            >
-              <div className="w-24 h-24 bg-gray-100 rounded-xl border border-gray-200 flex-shrink-0 flex items-center justify-center relative overflow-hidden">
-                <span className="absolute font-bold text-gray-300 text-[10px] uppercase tracking-widest text-center whitespace-nowrap -rotate-45">CERT IMAGE</span>
-                <img
-                  src={cert.image}
-                  alt={cert.title}
-                  className="w-full h-full object-contain relative z-10"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
+        <div className="relative max-w-2xl mx-auto">
+          <div className="flex items-center justify-between space-x-2 sm:space-x-4">
+            {certificates.length > 1 && (
+              <button
+                type="button"
+                onClick={prevSlide}
+                className="p-2 sm:p-3 rounded-full border border-gray-200 bg-white hover:bg-gray-50 transition-colors shadow-sm focus:outline-none hover:shadow-md shrink-0 active:scale-95 cursor-pointer"
+                aria-label="Previous certificate"
+              >
+                <ChevronLeft className="w-5 h-5 text-gray-700" />
+              </button>
+            )}
+
+            <div className="flex-1 min-w-0 overflow-hidden py-2 px-1">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={certIndex}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveCertImage(currentCert.image)}
+                    className="w-full text-left bg-white rounded-2xl shadow-sm border border-gray-200 p-4 sm:p-6 flex flex-col sm:flex-row items-center text-center sm:text-left space-y-4 sm:space-y-0 sm:space-x-6 hover:shadow-md transition-shadow group cursor-pointer"
+                    aria-label={`Open certificate image: ${currentCert.title}`}
+                  >
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gray-100 rounded-xl border border-gray-200 flex-shrink-0 flex items-center justify-center relative overflow-hidden">
+                      <span className="absolute font-bold text-gray-300 text-[10px] uppercase tracking-widest text-center whitespace-nowrap -rotate-45">CERT IMAGE</span>
+                      <img
+                        src={currentCert.image}
+                        alt={currentCert.title}
+                        className="w-full h-full object-contain relative z-10"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-playfair font-black text-lg text-gray-900 mb-1 group-hover:text-[#1B4F72] transition-colors truncate sm:whitespace-normal">
+                        {currentCert.title}
+                      </h3>
+                      <p className="font-sans text-xs text-gray-600 font-bold uppercase tracking-widest leading-relaxed">
+                        {currentCert.institution}
+                      </p>
+                      <div className="mt-3 inline-flex items-center text-green-700 text-xs font-bold bg-green-50 px-2 py-1 rounded">
+                        <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                        Verified
+                      </div>
+                    </div>
+                  </button>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {certificates.length > 1 && (
+              <button
+                type="button"
+                onClick={nextSlide}
+                className="p-2 sm:p-3 rounded-full border border-gray-200 bg-white hover:bg-gray-50 transition-colors shadow-sm focus:outline-none hover:shadow-md shrink-0 active:scale-95 cursor-pointer"
+                aria-label="Next certificate"
+              >
+                <ChevronRight className="w-5 h-5 text-gray-700" />
+              </button>
+            )}
+          </div>
+
+          {/* Dots Indicator */}
+          {certificates.length > 1 && (
+            <div className="flex justify-center space-x-2 mt-6">
+              {certificates.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setCurrentIndex(idx)}
+                  className={`h-2.5 rounded-full transition-all duration-300 cursor-pointer ${
+                    certIndex === idx ? 'w-8 bg-[#1B4F72]' : 'w-2.5 bg-gray-300 hover:bg-gray-400'
+                  }`}
+                  aria-label={`Go to certificate ${idx + 1}`}
                 />
-              </div>
-              <div>
-                <h3 className="font-playfair font-black text-lg text-gray-900 mb-1 group-hover:text-[#1B4F72] transition-colors">
-                  {cert.title}
-                </h3>
-                <p className="font-sans text-xs text-gray-600 font-bold uppercase tracking-widest">
-                  {cert.institution}
-                </p>
-                <div className="mt-3 inline-flex items-center text-green-700 text-xs font-bold bg-green-50 px-2 py-1 rounded">
-                  <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                  Verified
-                </div>
-              </div>
-            </button>
-          ))}
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Image Lightbox */}

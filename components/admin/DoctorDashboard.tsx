@@ -5,11 +5,12 @@ import {
   LogOut, PlusCircle, Trash2, BookOpen, Settings, Bell, Menu, X, Edit,
   Eye, FileText, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, ShieldCheck, RefreshCw, Plus, Save,
   Users, DollarSign, Calendar, Clock, Lock, Upload, Sparkles, HelpCircle,
-  Briefcase, Image as ImageIcon, AlertCircle, Search, Video, PhoneCall, Award
+  Briefcase, Image as ImageIcon, AlertCircle, Search, Video, PhoneCall, Award, CalendarDays, UserX, UserCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppointmentsList from './AppointmentsList';
 import QueueControls from './QueueControls';
+import DoctorBookingHistory from './DoctorBookingHistory';
 import DoctorTelemedicineView from '../doctor/DoctorTelemedicineView';
 import type { Booking, ClinicSettings, BlogPost, CMSContent, DbNotification, DailyQueue, QueueEntry } from '@/lib/types';
 import { formatPrice } from '@/lib/slots';
@@ -18,7 +19,7 @@ interface DoctorDashboardProps {
   onLogout: () => void;
 }
 
-type DoctorTab = 'overview' | 'queue' | 'prepaid' | 'settings' | 'booking-rules' | 'blogs' | 'cms' | 'telemedicine';
+type DoctorTab = 'overview' | 'history' | 'queue' | 'prepaid' | 'settings' | 'booking-rules' | 'blogs' | 'cms' | 'telemedicine';
 
 export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   const [tab, setTab] = useState<DoctorTab>('overview');
@@ -178,12 +179,13 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
         fetch(`/api/queue?date=${today}`)
       ]);
 
-      if (apptRes.ok) {
+      if (allApptRes.ok) {
+        const all = await allApptRes.json();
+        setAllBookings(all);
+        setBookings(all.filter((b: Booking) => b.date === today));
+      } else if (apptRes.ok) {
         const data = await apptRes.json();
         setBookings(data.filter((b: Booking) => b.date === today));
-      }
-      if (allApptRes.ok) {
-        setAllBookings(await allApptRes.json());
       }
       if (settingsRes.ok) {
         setSettings(await settingsRes.json());
@@ -245,12 +247,13 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
         fetch(`/api/queue?date=${today}`)
       ]);
 
-      if (apptRes.ok) {
+      if (allApptRes.ok) {
+        const all = await allApptRes.json();
+        setAllBookings(all);
+        setBookings(all.filter((b: Booking) => b.date === today));
+      } else if (apptRes.ok) {
         const data = await apptRes.json();
         setBookings(data.filter((b: Booking) => b.date === today));
-      }
-      if (allApptRes.ok) {
-        setAllBookings(await allApptRes.json());
       }
       if (notifRes.ok) {
         const allNotifs: DbNotification[] = await notifRes.json();
@@ -317,7 +320,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   };
 
   // General POST setting updates
-  const saveSettings = async (patch: Partial<ClinicSettings>) => {
+  const saveSettings = async (patch: Partial<ClinicSettings> & { blockSlot?: { date: string; time: string }; unblockSlot?: { date: string; time: string } }) => {
     setLoading(true);
     const res = await fetch('/api/settings', {
       method: 'POST',
@@ -680,6 +683,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
   const navItems = [
     { id: 'overview' as const, label: 'Dashboard', icon: <Users className="w-4 h-4" /> },
+    { id: 'history' as const, label: 'Date-wise Records', icon: <CalendarDays className="w-4 h-4" /> },
     { id: 'queue' as const, label: 'Queue Controls', icon: <Clock className="w-4 h-4" /> },
     { id: 'prepaid' as const, label: 'Pre-Paid', icon: <DollarSign className="w-4 h-4" /> },
     { id: 'settings' as const, label: 'Clinic Profile', icon: <Settings className="w-4 h-4" /> },
@@ -843,6 +847,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                 {expandedGroups.clinic && (
                   <div className="pl-4 space-y-1 border-l-2 border-teal-500/30 ml-3.5">
                     {[
+                      { id: 'history' as const, label: 'Date-wise Records', icon: <CalendarDays className="w-3.5 h-3.5" /> },
                       { id: 'queue' as const, label: 'Queue Controls', icon: <Clock className="w-3.5 h-3.5" /> },
                       { id: 'prepaid' as const, label: 'Pre-Paid Log', icon: <DollarSign className="w-3.5 h-3.5" /> },
                       { id: 'settings' as const, label: 'Clinic Profile', icon: <Settings className="w-3.5 h-3.5" /> },
@@ -1120,6 +1125,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               <div>
                 <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
                   {tab === 'overview' && 'Administrative Console'}
+                  {tab === 'history' && 'Date-wise Booking Records & Clinical History'}
                   {tab === 'queue' && 'Queue Management Board'}
                   {tab === 'prepaid' && 'Online Pre-paid Log'}
                   {tab === 'settings' && 'Clinic Configuration'}
@@ -1268,13 +1274,51 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                           triggerToast(`Action "${action}" completed`);
                           refresh();
                           return data; // returns { whatsappUrl } if available
+                        } else {
+                          const data = await res.json().catch(() => ({}));
+                          alert(data.error || 'Action failed.');
                         }
+
                       }}
                       onRefresh={refresh}
                       role="doctor"
                     />
                   </div>
 
+                </div>
+              )}
+
+              {/* PAST HISTORY & DATE-WISE RECORDS TAB */}
+              {tab === 'history' && (
+                <div className="w-full space-y-6">
+                  <DoctorBookingHistory
+                    bookings={allBookings}
+                    settings={settings}
+                    onRefresh={refresh}
+                    onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason) => {
+                      const res = await fetch('/api/appointments/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          id,
+                          action,
+                          nextScheduleDate,
+                          newDate: rescheduleDate,
+                          newTime: rescheduleTime,
+                          reason: rescheduleReason
+                        }),
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        triggerToast(`Action "${action}" completed`);
+                        refresh();
+                        return data;
+                      } else {
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.error || 'Action failed.');
+                      }
+                    }}
+                  />
                 </div>
               )}
 
@@ -1287,15 +1331,15 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               {tab === 'prepaid' && (
                 <div className="bg-white border rounded-2xl shadow-xs overflow-hidden">
                   <div className="p-6 border-b">
-                    <h3 className="font-bold text-lg text-gray-900">Pre-Paid Online Logins</h3>
+                    <h3 className="font-bold text-lg text-gray-900">Pre-Paid Clinic Logins</h3>
                     <p className="text-xs text-gray-500 mt-1 font-semibold">Skip billing queue directly. Generate Prescription directly.</p>
                   </div>
 
                   <div className="divide-y max-h-[500px] overflow-y-auto">
-                    {allBookings.filter(b => b.paymentStatus === 'paid').length === 0 ? (
-                      <div className="p-12 text-center text-gray-500 font-semibold">No paid records found.</div>
+                    {allBookings.filter(b => b.paymentStatus === 'paid' && b.bookingType !== 'online').length === 0 ? (
+                      <div className="p-12 text-center text-gray-500 font-semibold">No paid clinic records found.</div>
                     ) : (
-                      allBookings.filter(b => b.paymentStatus === 'paid').map(b => (
+                      allBookings.filter(b => b.paymentStatus === 'paid' && b.bookingType !== 'online').map(b => (
                         <div key={b.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
                           <div>
                             <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase">
@@ -1304,19 +1348,41 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                             <h4 className="font-bold text-gray-900 mt-1.5">{b.name}</h4>
                             <p className="text-xs text-gray-500 font-semibold">{b.phone} • {b.date} at {b.time} for {b.service}</p>
                           </div>
-                          <button
-                            onClick={() => window.open(`/admin/prescription?patientId=${b.id}&type=clinic`, '_blank')}
-                            className="px-4 py-2 bg-[#0B1B29] text-white text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 hover:bg-primary transition-colors outline-none"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            Write Rx
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => window.open(`/admin/prescription?patientId=${b.id}&type=clinic`, '_blank')}
+                              className="px-4 py-2 bg-[#0B1B29] text-white text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 hover:bg-primary transition-colors outline-none cursor-pointer"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              Write Rx
+                            </button>
+                            {Boolean(
+                              (b as any).hasCaseFile === true ||
+                              (b as any).prescriptionSent === true ||
+                              (b as any).caseFileSent === true ||
+                              ((b as any).prescriptionPdfBase64 && String((b as any).prescriptionPdfBase64).length > 50) ||
+                              ((b as any).prescriptionData && (
+                                (typeof (b as any).prescriptionData.medicines === 'string' && (b as any).prescriptionData.medicines.trim().length > 0) ||
+                                (typeof (b as any).prescriptionData.advice === 'string' && (b as any).prescriptionData.advice.trim().length > 0)
+                              ))
+                            ) && (
+                              <button
+                                onClick={() => window.open(`/prescription/view?id=${b.id}`, '_blank')}
+                                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 transition-colors outline-none cursor-pointer"
+                                title="View Patient's Completed Case File & Prescription Pad"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                                View Case File
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))
                     )}
                   </div>
                 </div>
               )}
+
 
               {/* CLINIC SETTINGS MANAGER */}
               {tab === 'settings' && (
@@ -1491,51 +1557,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                         </div>
                       )}
 
-                      {/* Card 3: About Doctor/Clinic (Moved from CMS) */}
-                      {cms && (
-                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                          <div className="flex items-center gap-3 border-b pb-3">
-                            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                              <FileText className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">About Clinic Section</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Doctor bio and clinical practice philosophy</p>
-                            </div>
-                          </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Title</label>
-                              <input
-                                type="text"
-                                value={cms.aboutTitle}
-                                onChange={(e) => setCms({ ...cms, aboutTitle: e.target.value })}
-                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                              />
-                            </div>
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Subtitle</label>
-                              <input
-                                type="text"
-                                value={cms.aboutSubtitle}
-                                onChange={(e) => setCms({ ...cms, aboutSubtitle: e.target.value })}
-                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Description</label>
-                            <textarea
-                              rows={4}
-                              value={cms.aboutDescription}
-                              onChange={(e) => setCms({ ...cms, aboutDescription: e.target.value })}
-                              className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                            />
-                          </div>
-                        </div>
-                      )}
 
 
 
@@ -1621,37 +1643,6 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                             </div>
                           </div>
 
-                          {/* Capacity limits */}
-                          <div className="grid grid-cols-3 gap-3 pt-2">
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Max Patients/Hour</label>
-                              <input
-                                type="number"
-                                value={settings.maxPatientsPerHour}
-                                onChange={(e) => setSettings({ ...settings, maxPatientsPerHour: Number(e.target.value) })}
-                                className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
-                              />
-                            </div>
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Max Online/Day</label>
-                              <input
-                                type="number"
-                                value={settings.onlineMaxDailyBooking}
-                                onChange={(e) => setSettings({ ...settings, onlineMaxDailyBooking: Number(e.target.value) })}
-                                className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
-                                placeholder="e.g. 15"
-                              />
-                            </div>
-                            <div className="flex flex-col">
-                              <label className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Max Offline/Day</label>
-                              <input
-                                type="number"
-                                value={settings.maxBookingsPerDay}
-                                onChange={(e) => setSettings({ ...settings, maxBookingsPerDay: Number(e.target.value) })}
-                                className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all"
-                              />
-                            </div>
-                          </div>
 
                           {/* Advance notice needed */}
                           <div className="flex flex-col pt-2 border-t border-gray-150">
@@ -1844,78 +1835,189 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                           </div>
                         </div>
 
-                        {/* Card: Online Booking & Payment Policies */}
-                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                        {/* Card: Holidays & Blocked Slots Manager */}
+                        <div className="lg:col-span-12 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-6 hover:shadow-md transition-all text-left">
                           <div className="flex items-center gap-3 border-b pb-3">
-                            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                              <Settings className="w-5 h-5" />
+                            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                              <Calendar className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Online Booking & Payment Policies</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Configure prepayment requirements and approval rules for online slots</p>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Manage Holidays & Blocked Slots</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Declare full-day clinic leaves or block specific time slots</p>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 gap-4">
-                            {/* Toggle 1: Enable Online Booking */}
-                            <label
-                              className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
-                                settings.enableOnlineBooking
-                                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
-                                  : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="space-y-0.5">
-                                <span className="text-xs font-bold block">Enable Online Bookings</span>
-                                <span className="text-[10px] text-gray-500 font-medium block">Allow patients to schedule slots online</span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Left: Holidays List & Add */}
+                            <div className="space-y-4">
+                              <h4 className="font-sans text-xs font-bold text-gray-800 uppercase tracking-wider">Full-Day Holidays / Leaves</h4>
+                              
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-black uppercase text-gray-500">Select Date</label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="date"
+                                    id="newHolidayDate"
+                                    className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer flex-1"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const input = document.getElementById('newHolidayDate') as HTMLInputElement;
+                                      if (input && input.value) {
+                                        const date = input.value;
+                                        if (settings.holidays?.includes(date)) {
+                                          triggerToast('Date is already added as holiday');
+                                          return;
+                                        }
+                                        const updatedHolidays = [...(settings.holidays || []), date];
+                                        saveSettings({ holidays: updatedHolidays });
+                                        input.value = '';
+                                      } else {
+                                        triggerToast('Please select a date first');
+                                      }
+                                    }}
+                                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer outline-none shrink-0"
+                                  >
+                                    Add Leave
+                                  </button>
+                                </div>
                               </div>
-                              <input
-                                type="checkbox"
-                                checked={!!settings.enableOnlineBooking}
-                                onChange={(e) => setSettings({ ...settings, enableOnlineBooking: e.target.checked })}
-                                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
-                              />
-                            </label>
 
-                            {/* Toggle 2: Upfront Online Payment */}
-                            <label
-                              className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
-                                settings.onlinePaymentMandatory
-                                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
-                                  : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="space-y-0.5">
-                                <span className="text-xs font-bold block">Require Upfront Payment</span>
-                                <span className="text-[10px] text-gray-500 font-medium block">Patients must pay online during booking</span>
+                              <div className="max-h-[220px] overflow-y-auto border border-gray-150 rounded-xl divide-y divide-gray-100 bg-gray-50/20">
+                                {settings.holidays && settings.holidays.length > 0 ? (
+                                  settings.holidays.map((date) => (
+                                    <div key={date} className="flex items-center justify-between p-3">
+                                      <span className="font-mono text-xs text-gray-700 font-bold">
+                                        {new Date(date).toLocaleDateString('en-US', {
+                                          weekday: 'short',
+                                          year: 'numeric',
+                                          month: 'short',
+                                          day: 'numeric',
+                                        })}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const updatedHolidays = (settings.holidays || []).filter(d => d !== date);
+                                          saveSettings({ holidays: updatedHolidays });
+                                        }}
+                                        className="text-gray-400 hover:text-rose-600 transition-colors p-1 cursor-pointer"
+                                        aria-label={`Remove holiday date: ${date}`}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-xs text-gray-400 italic p-4 text-center">No holiday dates declared yet.</p>
+                                )}
                               </div>
-                              <input
-                                type="checkbox"
-                                checked={!!settings.onlinePaymentMandatory}
-                                onChange={(e) => setSettings({ ...settings, onlinePaymentMandatory: e.target.checked })}
-                                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
-                              />
-                            </label>
+                            </div>
 
-                            {/* Toggle 3: Requires Approval */}
-                            <label
-                              className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${
-                                settings.onlineRequiresApproval
-                                  ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
-                                  : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="space-y-0.5">
-                                <span className="text-xs font-bold block">Require Doctor Approval</span>
-                                <span className="text-[10px] text-gray-500 font-medium block">Bookings start as pending approval</span>
+                            {/* Right: Block specific slots */}
+                            <div className="space-y-4">
+                              <h4 className="font-sans text-xs font-bold text-gray-800 uppercase tracking-wider">Block Specific Time Ranges</h4>
+                              
+                              <div className="flex flex-col gap-3">
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] font-black uppercase text-gray-500">Select Date</label>
+                                  <input
+                                    type="date"
+                                    id="blockSlotDate"
+                                    className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
+                                  />
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-black uppercase text-gray-500">From Time</label>
+                                    <input
+                                      type="time"
+                                      id="blockSlotFromTime"
+                                      className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-black uppercase text-gray-500">To Time</label>
+                                    <input
+                                      type="time"
+                                      id="blockSlotToTime"
+                                      className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const dateInput = document.getElementById('blockSlotDate') as HTMLInputElement;
+                                    const fromTimeInput = document.getElementById('blockSlotFromTime') as HTMLInputElement;
+                                    const toTimeInput = document.getElementById('blockSlotToTime') as HTMLInputElement;
+                                    if (dateInput?.value && fromTimeInput?.value && toTimeInput?.value) {
+                                      const date = dateInput.value;
+                                      const fromTime = fromTimeInput.value;
+                                      const toTime = toTimeInput.value;
+                                      
+                                      if (fromTime >= toTime) {
+                                        triggerToast('From Time must be before To Time');
+                                        return;
+                                      }
+
+                                      const timeRange = `${fromTime}-${toTime}`;
+                                      
+                                      if (settings.blockedSlots?.some(s => s.date === date && s.time === timeRange)) {
+                                        triggerToast('This time range is already blocked');
+                                        return;
+                                      }
+
+                                      saveSettings({ blockSlot: { date, time: timeRange } });
+                                      dateInput.value = '';
+                                      fromTimeInput.value = '';
+                                      toTimeInput.value = '';
+                                    } else {
+                                      triggerToast('Please select date, from-time and to-time');
+                                    }
+                                  }}
+                                  className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer outline-none"
+                                >
+                                  Block Time Range
+                                </button>
                               </div>
-                              <input
-                                type="checkbox"
-                                checked={!!settings.onlineRequiresApproval}
-                                onChange={(e) => setSettings({ ...settings, onlineRequiresApproval: e.target.checked })}
-                                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer shrink-0 ml-4"
-                              />
-                            </label>
+
+                              <div className="max-h-[220px] overflow-y-auto border border-gray-150 rounded-xl divide-y divide-gray-100 bg-gray-50/20">
+                                {settings.blockedSlots && settings.blockedSlots.length > 0 ? (
+                                  settings.blockedSlots.map((slot, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-3">
+                                      <div className="flex flex-col">
+                                        <span className="font-sans text-xs text-gray-800 font-bold">
+                                          {new Date(slot.date).toLocaleDateString('en-US', {
+                                            year: 'numeric',
+                                            month: 'short',
+                                            day: 'numeric',
+                                          })}
+                                        </span>
+                                        <span className="font-mono text-[10px] text-gray-500 font-semibold mt-0.5">
+                                          Time: {slot.time.includes('-') ? slot.time.replace('-', ' to ') : slot.time}
+                                        </span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          saveSettings({ unblockSlot: { date: slot.date, time: slot.time } });
+                                        }}
+                                        className="text-gray-400 hover:text-rose-600 transition-colors p-1 cursor-pointer"
+                                        aria-label={`Unblock slot ${slot.time} on ${slot.date}`}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-xs text-gray-400 italic p-4 text-center">No individual slots blocked yet.</p>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -2375,133 +2477,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
 
 
-                      {/* Card 2: Homepage Hero Segment */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                        <div className="flex items-center gap-3 border-b pb-3">
-                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                            <ImageIcon className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">Homepage Hero Header Intro</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Primary hero text and clinic experience callouts</p>
-                          </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Main Headline (Line 1)</label>
-                            <input
-                              type="text"
-                              value={cms.heroTitleLine1}
-                              onChange={(e) => setCms({ ...cms, heroTitleLine1: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Main Headline (Line 2)</label>
-                            <input
-                              type="text"
-                              value={cms.heroTitleLine2}
-                              onChange={(e) => setCms({ ...cms, heroTitleLine2: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Subtitle</label>
-                          <input
-                            type="text"
-                            value={cms.heroSubtitle}
-                            onChange={(e) => setCms({ ...cms, heroSubtitle: e.target.value })}
-                            className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                          />
-                        </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Description Paragraph</label>
-                          <textarea
-                            rows={3}
-                            value={cms.heroDescription}
-                            onChange={(e) => setCms({ ...cms, heroDescription: e.target.value })}
-                            className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Highlight Badge 1</label>
-                            <input
-                              type="text"
-                              value={cms.heroBadge1}
-                              onChange={(e) => setCms({ ...cms, heroBadge1: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Highlight Badge 2</label>
-                            <input
-                              type="text"
-                              value={cms.heroBadge2}
-                              onChange={(e) => setCms({ ...cms, heroBadge2: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Experience Badge</label>
-                            <input
-                              type="text"
-                              value={cms.heroExperienceBadge}
-                              onChange={(e) => setCms({ ...cms, heroExperienceBadge: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-blue-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Card 3: About Segment */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                        <div className="flex items-center gap-3 border-b pb-3">
-                          <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                            <FileText className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-playfair font-bold text-base text-gray-900">About Clinic Section</h3>
-                            <p className="text-[10px] text-gray-500 font-semibold">Doctor bio and clinical practice philosophy</p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Title</label>
-                            <input
-                              type="text"
-                              value={cms.aboutTitle}
-                              onChange={(e) => setCms({ ...cms, aboutTitle: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Subtitle</label>
-                            <input
-                              type="text"
-                              value={cms.aboutSubtitle}
-                              onChange={(e) => setCms({ ...cms, aboutSubtitle: e.target.value })}
-                              className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">About Section Description</label>
-                          <textarea
-                            rows={4}
-                            value={cms.aboutDescription}
-                            onChange={(e) => setCms({ ...cms, aboutDescription: e.target.value })}
-                            className="p-3.5 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500"
-                          />
-                        </div>
-                      </div>
 
                       {/* Card 3.5: Treatments & Clinical Services CRUD Segment */}
                       <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">

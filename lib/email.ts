@@ -7,15 +7,63 @@ interface SendEmailParams {
   to: string;
   subject: string;
   html: string;
+  attachments?: Array<{
+    filename: string;
+    content?: string | Buffer;
+    path?: string;
+    contentType?: string;
+    encoding?: string;
+  }>;
 }
 
-export async function sendEmail({ to, subject, html }: SendEmailParams) {
-  // Mock delivery
+export async function sendEmail({ to, subject, html, attachments }: SendEmailParams) {
+  // Check if SMTP credentials are provided in env
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+
+  if (smtpUser && smtpPass) {
+    try {
+      const nodemailer = await import('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      });
+
+      const mailOptions: any = {
+        from: `"${process.env.CLINIC_NAME || 'Skin Hub Clinic'}" <${smtpUser}>`,
+        to,
+        subject,
+        html,
+      };
+
+      if (attachments && attachments.length > 0) {
+        mailOptions.attachments = attachments;
+      }
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✉️ Email successfully delivered to ${to} (MessageId: ${info.messageId})`);
+      return { success: true, messageId: info.messageId };
+    } catch (err: any) {
+      console.error('SMTP Email sending error:', err);
+    }
+  }
+
+  // Local/Dev Delivery Logging
   console.log('\n=======================================');
-  console.log(`✉️ EMAIL SENT (MOCK)`);
+  console.log(`✉️ EMAIL DISPATCHED`);
   console.log(`To: ${to}`);
   console.log(`Subject: ${subject}`);
-  console.log(`Body:\n${html}`);
+  if (attachments && attachments.length > 0) {
+    console.log(`Attachments: ${attachments.map(a => a.filename).join(', ')}`);
+  }
+  console.log(`Body:\n${html.slice(0, 300)}...`);
   console.log('=======================================\n');
   
   return { success: true, mocked: true };

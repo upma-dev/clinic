@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { updateBookingStatus, deleteBooking, getBookingById } from '@/lib/db/bookings';
+import { updateBookingStatus, deleteBooking, getBookingById, isSlotTaken } from '@/lib/db/bookings';
 import { createNotification } from '@/lib/db/notifications';
 import { getDb, COLLECTIONS } from '@/lib/mongodb';
 import { getClinicSettings } from '@/lib/db/settings';
@@ -31,9 +31,21 @@ export async function POST(req: NextRequest) {
       case 'confirm': {
         const confirmSettings = await getClinicSettings();
 
+        // Concurrency Check: Prevent double-booking on confirmation
+        const isOccupied = await isSlotTaken(booking.date, booking.time, booking.id);
+        if (isOccupied) {
+          return NextResponse.json(
+            { error: `Slot ${booking.time} on ${booking.date} is already confirmed for another patient. Please reschedule this patient to an available slot before confirming.` },
+            { status: 409 }
+          );
+        }
+
         if (booking.bookingType === 'online') {
-          // If a payment link already exists in the database, reuse it to avoid duplicate API calls and reference_id errors
-          if (booking.razorpayPaymentLink && booking.razorpayPaymentLinkId) {
+          const fee = confirmSettings.onlineConsultationFee || confirmSettings.consultationFee || 500;
+
+          // If a payment link already exists and matches the current fee, reuse it
+          const isSameAmount = booking.amount === fee;
+          if (booking.razorpayPaymentLink && booking.razorpayPaymentLinkId && isSameAmount) {
             const payMsg = `*🌟 ${confirmSettings.clinicName} — Online Consultation Payment Request 💳*\n\nNamaste *${booking.name}*! 🙏\n\nAapki online consultation request review ho gayi hai. Niche diye gaye secure link par click karke payment complete karein aur apna slot confirm karein:\n\n🔗 *Payment Link:* ${booking.razorpayPaymentLink}\n\n*📋 Booking Details:*\n• *Booking ID:* #${booking.id}\n• *Service:* ${booking.service}\n• *Date:* ${booking.date}\n• *Time:* ${booking.time}\n\n*⚠️ Note:* Payment complete hote hi aapka slot officially book ho jayega aur video meeting link share kiya jayega.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad! 🙏`;
             whatsappUrl = buildWhatsAppUrl(booking.phone, payMsg);
             break;
@@ -48,7 +60,6 @@ export async function POST(req: NextRequest) {
 
           if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
             const authStr = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
-            const fee = confirmSettings.onlineConsultationFee || confirmSettings.consultationFee || 500;
             
             try {
               const payRes = await fetch('https://api.razorpay.com/v1/payment_links', {
@@ -81,16 +92,21 @@ export async function POST(req: NextRequest) {
                 paymentLinkId = payData.id;
               } else {
                 console.error('Razorpay payment link creation failed:', payData);
-                throw new Error(payData.error?.description || 'Failed to create payment link');
+                return NextResponse.json({ 
+                  error: `Razorpay API Error: ${payData.error?.description || 'Failed to create payment link'}` 
+                }, { status: 400 });
               }
             } catch (err: any) {
               console.error('Razorpay payment link API error:', err);
-              return NextResponse.json({ error: err.message || 'Payment link creation failed' }, { status: 500 });
+              return NextResponse.json({ 
+                error: `Razorpay Connection Error: ${err.message || 'API connection failed'}` 
+              }, { status: 500 });
             }
           } else {
             paymentLinkId = 'mock_plink_' + Date.now();
             paymentLinkUrl = `${req.nextUrl.origin}/telemedicine/pay-mock?bookingId=${booking.id}`;
           }
+
 
           const db = await getDb();
           await db.collection(COLLECTIONS.bookings).updateOne(
@@ -100,7 +116,8 @@ export async function POST(req: NextRequest) {
                 paymentStatus: 'pending', 
                 razorpayPaymentLink: paymentLinkUrl,
                 razorpayPaymentLinkId: paymentLinkId,
-                payOnline: true
+                payOnline: true,
+                amount: fee
               } 
             }
           );
@@ -159,11 +176,64 @@ export async function POST(req: NextRequest) {
         if (!newDate || !newTime) {
           return NextResponse.json({ error: 'Missing newDate or newTime' }, { status: 400 });
         }
+
+        // Validate that target slot is not already booked by another patient
+        const isOccupied = await isSlotTaken(newDate, newTime, id);
+        if (isOccupied) {
+          return NextResponse.json(
+            { error: `Slot ${newTime} on ${newDate} is already booked or reserved. Please choose a different time.` },
+            { status: 409 }
+          );
+        }
         
         const dbResched = await getDb();
+
+        // If date changed, remove old queue entry for the previous date
+        if (booking.date !== newDate) {
+          await dbResched.collection(COLLECTIONS.queue).deleteOne({ bookingId: id });
+        }
+
+        const updateDoc: Record<string, any> = {
+          date: newDate,
+          time: newTime,
+          rescheduleReason: reason || 'Patient requested reschedule',
+          rescheduledAt: new Date().toISOString(),
+        };
+
+        if (body.name) updateDoc.name = body.name;
+        if (body.phone) updateDoc.phone = body.phone;
+        if (body.email !== undefined) updateDoc.email = body.email;
+        if (body.service) updateDoc.service = body.service;
+        if (body.gender) updateDoc.gender = body.gender;
+        if (body.age !== undefined && body.age !== '') updateDoc.age = Number(body.age);
+        if (body.address !== undefined) updateDoc.address = body.address;
+        if (body.skinType) updateDoc.skinType = body.skinType;
+        if (body.problemDescription !== undefined) updateDoc.problemDescription = body.problemDescription;
+        if (body.previousMedication !== undefined) updateDoc.previousMedication = body.previousMedication;
+        if (body.appointmentNotes !== undefined) updateDoc.appointmentNotes = body.appointmentNotes;
+        if (body.bookingType) updateDoc.bookingType = body.bookingType;
+
+        // Keep status confirmed if it was already confirmed or paid, otherwise keep current status
+        if (body.status) {
+          updateDoc.status = body.status;
+        } else if (booking.status === 'confirmed' || booking.paymentStatus === 'paid' || session.role === 'staff' || session.role === 'doctor') {
+          updateDoc.status = 'confirmed';
+        } else {
+          updateDoc.status = 'pending';
+        }
+
         await dbResched.collection(COLLECTIONS.bookings).updateOne(
           { id },
-          { $set: { date: newDate, time: newTime, status: 'pending', rescheduleReason: reason } }
+          { 
+            $set: updateDoc,
+            $unset: { holdExpiresAt: "" }
+          }
+        );
+
+        // Sync queue collection entry: re-activate as waiting with newDate
+        await dbResched.collection(COLLECTIONS.queue).updateOne(
+          { bookingId: id },
+          { $set: { status: 'waiting', date: newDate, estimatedWaitMinutes: 15 } }
         );
 
         await createNotification(
@@ -206,10 +276,7 @@ export async function POST(req: NextRequest) {
       case 'cancel': {
         await updateBookingStatus(id, 'cancelled');
         const dbCancel = await getDb();
-        await dbCancel.collection(COLLECTIONS.queue).updateOne(
-          { bookingId: id },
-          { $set: { status: 'skipped' } }
-        );
+        await dbCancel.collection(COLLECTIONS.queue).deleteOne({ bookingId: id });
 
         await createNotification(
           'booking_cancelled',
@@ -226,6 +293,10 @@ export async function POST(req: NextRequest) {
             id: booking.id
           }).catch(err => console.error('Failed to send cancelled email:', err));
         }
+
+        const cancelSettings = await getClinicSettings();
+        const cancelMsg = `*🌟 ${cancelSettings.clinicName} — Appointment Cancellation Notice* ❌\n\nNamaste *${booking.name}*! 🙏\n\nAapka appointment (ID: #${booking.id}) scheduled for *${booking.date}* at *${booking.time}* cancel kar diya gaya hai.\n\nAgar aap naya slot book karna chahte hain to kripya hamari website par visit karein ya clinic desk par call karein: ${cancelSettings.clinicPhone}.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad!\n*Team Skin Hub* 🙏`;
+        whatsappUrl = buildWhatsAppUrl(booking.phone, cancelMsg);
         break;
       }
 
@@ -323,7 +394,7 @@ export async function POST(req: NextRequest) {
             await sendAutomatedEmail(booking.email, 'followUp', {
               name: booking.name,
               date: nextScheduleDate,
-              doctorName: settings.doctorName || 'Dr. Prateek Tiwari',
+              doctorName: 'Dr. Prateek Tiwari',
               address: settings.clinicAddress,
               notes: 'Please review your skincare checklist on the patient portal.'
             }).catch(err => console.error('Failed to send follow-up email:', err));
@@ -336,7 +407,7 @@ export async function POST(req: NextRequest) {
           patientName: booking.name,
           appointmentId: booking.id,
           service: booking.service,
-          doctorName: completeSettings.doctorName || 'Dr. Prateek Tiwari',
+          doctorName: 'Dr. Prateek Tiwari',
           nextScheduleDate: nextScheduleDate || undefined,
         });
         whatsappUrl = buildWhatsAppUrl(booking.phone, thankYouMsg);
@@ -427,9 +498,9 @@ export async function POST(req: NextRequest) {
         const updateFields: any = { status: 'arrived' };
         if (paymentMethod) {
           const settings = await getClinicSettings();
-          const fee = booking.bookingType === 'online'
+          const fee = booking.amount || (booking.bookingType === 'online'
             ? (settings.onlineConsultationFee || settings.consultationFee || 600)
-            : (settings.offlineConsultationFee || settings.consultationFee || 700);
+            : (settings.offlineConsultationFee || settings.consultationFee || 700));
           updateFields.paymentStatus = 'paid';
           updateFields.paymentMethod = paymentMethod;
           updateFields.amountPaid = fee;
@@ -467,15 +538,28 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      case 'mark-waiting':
-        // Move back to confirmed/waiting state
+      case 'mark-waiting': {
+        // Prevent re-adding if original slot is taken or in the past
+        const isTaken = await isSlotTaken(booking.date, booking.time, id);
+        if (isTaken) {
+          return NextResponse.json({
+            error: `Slot ${booking.time} on ${booking.date} is already booked by another patient. You must reschedule this skipped patient to an available slot.`,
+            requiresReschedule: true,
+          }, { status: 409 });
+        }
         await updateBookingStatus(id, 'confirmed');
+        const dbWait = await getDb();
+        await dbWait.collection(COLLECTIONS.queue).updateOne(
+          { bookingId: id },
+          { $set: { status: 'waiting', date: booking.date } }
+        );
         await createNotification(
           'queue_update',
           'Patient Returned to Queue',
           `${booking.name} was moved back to waiting queue.`
         );
         break;
+      }
 
       case 'verify-payment-link': {
         const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID?.trim();
@@ -600,6 +684,8 @@ export async function POST(req: NextRequest) {
                 const payData = await payRes.json();
                 if (payData.status === 'paid') {
                   const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
+                  const { addQueueEntry, getNextTokenNumber } = await import('@/lib/db/queue');
+                  const tokenNumber = await getNextTokenNumber(freshBooking.date);
                   
                   // Update database status
                   await db.collection(COLLECTIONS.bookings).updateOne(
@@ -608,6 +694,7 @@ export async function POST(req: NextRequest) {
                       $set: { 
                         paymentStatus: 'paid',
                         status: 'confirmed',
+                        tokenNumber,
                         razorpayPaymentId: payData.payments?.[0]?.payment_id || 'manual_verify',
                         amountPaid: payData.amount_paid / 100,
                         paidAt: new Date().toISOString(),
@@ -617,16 +704,30 @@ export async function POST(req: NextRequest) {
                     }
                   );
 
+                  await addQueueEntry({
+                    date: freshBooking.date,
+                    tokenNumber,
+                    name: freshBooking.name,
+                    phone: freshBooking.phone,
+                    source: freshBooking.source || 'online',
+                    bookingId: freshBooking.id,
+                    status: 'waiting',
+                    estimatedWaitMinutes: 0,
+                    scheduledTime: freshBooking.time,
+                    createdAt: new Date().toISOString(),
+                  });
+
                   await createNotification(
                     'payment_received',
                     'Payment Verified via Sync Check',
-                    `${freshBooking.name}'s payment synced as Paid. Slot confirmed and video link generated.`
+                    `${freshBooking.name}'s payment synced as Paid. Slot confirmed and video link generated.${tokenNumber ? ` Token #${tokenNumber}` : ''}`
                   );
 
                   return NextResponse.json({
                     success: true,
                     paymentStatus: 'paid',
                     status: 'confirmed',
+                    tokenNumber,
                     paid: true
                   });
                 }

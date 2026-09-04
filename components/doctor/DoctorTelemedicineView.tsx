@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Video, Clock, ChevronRight, FileText, CheckCircle, Search, RefreshCw, 
-  Phone, MessageCircle, Calendar, List, LayoutGrid, AlertCircle, Eye
+  Phone, MessageCircle, Calendar, List, LayoutGrid, AlertCircle, Eye, Mail
 } from 'lucide-react';
 import DigitalPatientCaseFile from './DigitalPatientCaseFile';
 
@@ -21,6 +21,7 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null);
+  const [settings, setSettings] = useState<any | null>(null);
 
   useEffect(() => {
     if (initialStage) {
@@ -50,6 +51,10 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
 
   useEffect(() => {
     fetchAppointments();
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setSettings(data); })
+      .catch(console.error);
   }, []);
 
   const handleConfirm = async (apt: any) => {
@@ -94,10 +99,78 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
   };
 
   const handleWhatsAppContact = (apt: any) => {
+    if (!apt.phone) {
+      alert(`Patient ${apt.name} did not provide a WhatsApp number. Use the "Email" button to send consultation details to their email address.`);
+      return;
+    }
     const meetingUrl = apt.meetingUrl || `https://meet.ffmuc.net/SkinHub-Consult-${(apt.name || 'Patient').replace(/[^a-zA-Z0-9]/g, '')}-${(apt._id || 'room').toString().substring(0, 8)}`;
     const msg = `*Skin Hub Clinic — Online Video Consultation* 🏥\n\nHello ${apt.name},\n\nThis is Dr. Prateek Tiwari from Skin Hub Clinic. Your online video consultation is scheduled for *${apt.preferredDate}* at *${apt.preferredTimeSlot}*.\n\n📹 *Video Meeting Link:* ${meetingUrl}\n\nPlease click the link to join your video consultation session.`;
     const cleanPhone = (apt.phone || '').replace(/\D/g, '');
     window.open(`https://wa.me/${cleanPhone.startsWith('91') ? cleanPhone : '91' + cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  const handleEmailContact = async (apt: any) => {
+    let email = apt.email;
+    if (!email || !email.includes('@')) {
+      const entered = prompt(`Patient ${apt.name} has no valid email registered. Please enter an email address to send consultation details:`);
+      if (!entered || !entered.includes('@')) return;
+      email = entered.trim();
+      apt.email = email;
+    }
+
+    const meetingUrl = apt.meetingUrl || `https://meet.ffmuc.net/SkinHub-Consult-${(apt.name || 'Patient').replace(/[^a-zA-Z0-9]/g, '')}-${(apt._id || 'room').toString().substring(0, 8)}`;
+    try {
+      const res = await fetch('/api/communication/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email,
+          patientName: apt.name,
+          type: 'meeting-link',
+          appointmentId: apt._id || apt.id,
+          date: apt.preferredDate,
+          time: apt.preferredTimeSlot,
+          meetingUrl
+        })
+      });
+      if (res.ok) {
+        alert(`✉️ Video consultation link and details successfully sent to ${email}!`);
+        fetchAppointments();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error || 'Failed to send email.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error connecting to email service.');
+    }
+  };
+
+  // Check if case file / prescription has been created and sent to patient
+  const isCaseFileReadyAndSent = (apt: any) => {
+    if (!apt) return false;
+    const hasPdf = Boolean(apt.prescriptionPdfBase64 && String(apt.prescriptionPdfBase64).length > 50);
+    const hasMeds = Boolean(
+      apt.prescriptionData && (
+        (typeof apt.prescriptionData.medicines === 'string' && apt.prescriptionData.medicines.trim().length > 0) ||
+        (typeof apt.prescriptionData.advice === 'string' && apt.prescriptionData.advice.trim().length > 0)
+      )
+    );
+    const hasConsultationRx = Boolean(
+      apt.consultation && (
+        (typeof apt.consultation.prescriptionText === 'string' && apt.consultation.prescriptionText.trim().length > 0) ||
+        (typeof apt.consultation.prescription === 'string' && apt.consultation.prescription.trim().length > 0)
+      )
+    );
+    return Boolean(
+      apt.hasCaseFile === true ||
+      apt.prescriptionSent === true ||
+      apt.caseFileSent === true ||
+      hasPdf ||
+      hasMeds ||
+      hasConsultationRx ||
+      apt.hasConsultationCaseFile === true
+    );
   };
 
   if (selectedAppointment) {
@@ -302,22 +375,39 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
                       </div>
                     </td>
 
-                    {/* Contact Doctor Actions (Phone + WhatsApp) */}
+                    {/* Contact Doctor Actions (Phone + WhatsApp + Email) */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <a
-                          href={`tel:${apt.phone}`}
-                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
-                          title="Call Patient"
-                        >
-                          <Phone className="w-3 h-3" /> {apt.phone}
-                        </a>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {apt.phone ? (
+                          <>
+                            <a
+                              href={`tel:${apt.phone}`}
+                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
+                              title="Call Patient"
+                            >
+                              <Phone className="w-3 h-3" /> {apt.phone}
+                            </a>
+                            <button
+                              onClick={() => handleWhatsAppContact(apt)}
+                              className="px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                              title="Contact via WhatsApp"
+                            >
+                              <MessageCircle className="w-3 h-3" /> WhatsApp
+                            </button>
+                          </>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded border text-[9px] font-semibold">
+                            No WhatsApp
+                          </span>
+                        )}
+
                         <button
-                          onClick={() => handleWhatsAppContact(apt)}
-                          className="px-2.5 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
-                          title="Contact via WhatsApp"
+                          onClick={() => handleEmailContact(apt)}
+                          className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                          title={apt.email ? `Send meeting details to email: ${apt.email}` : "Send consultation details via email"}
                         >
-                          <MessageCircle className="w-3 h-3" /> WhatsApp
+                          <Mail className="w-3 h-3 text-sky-600" />
+                          <span>Email</span>
                         </button>
                       </div>
                     </td>
@@ -338,9 +428,17 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
 
                     {/* Payment Status */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px] uppercase">
-                        {apt.paymentStatus === 'paid' ? '₹600 Paid' : 'Pending'}
-                      </span>
+                      {(() => {
+                        const fee = apt.amountPaid || apt.amount || settings?.onlineConsultationFee || 500;
+                        const isPaid = String(apt.paymentStatus || '').toLowerCase() === 'paid';
+                        return (
+                          <span className={`font-bold px-2 py-0.5 rounded border text-[10px] uppercase ${
+                            isPaid ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-amber-700 bg-amber-50 border-amber-200'
+                          }`}>
+                            ₹{fee} {isPaid ? 'Paid' : 'Pending'}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     {/* Stage Status Badge */}
@@ -384,12 +482,25 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
                           </button>
                         )}
 
+                        {/* Write Rx button identical to Pre-Paid Log */}
                         <button
-                          onClick={() => setSelectedAppointment(apt)}
-                          className="px-2.5 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                          onClick={() => window.open(`/admin/prescription?patientId=${apt._id || apt.id}&type=telemedicine`, '_blank')}
+                          className="px-2.5 py-1.5 bg-[#0B1B29] hover:bg-primary text-white rounded-lg text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 transition-colors cursor-pointer outline-none"
+                          title="Ready / Write Prescription (like Pre-Paid Log)"
                         >
-                          <FileText className="w-3 h-3" /> Case File & PDF
+                          <FileText className="w-3 h-3" /> Write Rx
                         </button>
+
+                        {/* Case File button ONLY shown if file has been created & sent */}
+                        {isCaseFileReadyAndSent(apt) && (
+                          <button
+                            onClick={() => window.open(`/prescription/view?id=${apt.id || apt._id}`, '_blank')}
+                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                            title="View Patient's Completed Case File & Prescription Pad"
+                          >
+                            <Eye className="w-3 h-3 text-emerald-600" /> View Case File
+                          </button>
+                        )}
                       </div>
                     </td>
 
@@ -424,9 +535,17 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
                     <span className="text-primary font-bold flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5" /> {apt.preferredDate} ({apt.preferredTimeSlot})
                     </span>
-                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                      ₹600 Paid
-                    </span>
+                    {(() => {
+                      const fee = apt.amountPaid || apt.amount || settings?.onlineConsultationFee || 500;
+                      const isPaid = String(apt.paymentStatus || '').toLowerCase() === 'paid';
+                      return (
+                        <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
+                          isPaid ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-amber-700 bg-amber-50 border-amber-200'
+                        }`}>
+                          ₹{fee} {isPaid ? 'Paid' : 'Pending'}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="bg-amber-50/40 p-3 rounded-xl border border-amber-100 text-xs">
@@ -435,28 +554,60 @@ export default function DoctorTelemedicineView({ initialStage = 'confirmed', onS
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-gray-150 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => handleWhatsAppContact(apt)}
-                    className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-bold flex items-center gap-1"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-                  </button>
+                <div className="pt-3 border-t border-gray-150 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {apt.phone ? (
+                      <button
+                        onClick={() => handleWhatsAppContact(apt)}
+                        className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        title="Send meeting details via WhatsApp"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                      </button>
+                    ) : (
+                      <span className="px-2.5 py-1 bg-gray-100 text-gray-500 rounded-lg border text-[10px] font-semibold">
+                        No WhatsApp
+                      </span>
+                    )}
+
+                    <button
+                      onClick={() => handleEmailContact(apt)}
+                      className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      title={apt.email ? `Send meeting details to email: ${apt.email}` : "Send consultation details via email"}
+                    >
+                      <Mail className="w-3.5 h-3.5 text-sky-600" /> Email
+                    </button>
+                  </div>
 
                   <div className="flex gap-2">
+                    {apt.status !== 'completed' && (
+                      <button
+                        onClick={() => handleJoinMeeting(apt)}
+                        className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Video className="w-3.5 h-3.5" /> Join Call
+                      </button>
+                    )}
+
+                    {/* Write Rx button identical to Pre-Paid Log */}
                     <button
-                      onClick={() => handleJoinMeeting(apt)}
-                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                      onClick={() => window.open(`/admin/prescription?patientId=${apt._id || apt.id}&type=telemedicine`, '_blank')}
+                      className="px-3 py-1.5 bg-[#0B1B29] hover:bg-primary text-white text-xs font-bold uppercase tracking-wide rounded-lg flex items-center gap-1.5 transition-colors outline-none cursor-pointer"
+                      title="Ready / Write Prescription (like Pre-Paid Log)"
                     >
-                      <Video className="w-3.5 h-3.5" /> Join Call
+                      <FileText className="w-3.5 h-3.5" /> Write Rx
                     </button>
 
-                    <button
-                      onClick={() => setSelectedAppointment(apt)}
-                      className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-bold flex items-center gap-1"
-                    >
-                      <FileText className="w-3.5 h-3.5" /> Case File
-                    </button>
+                    {/* Case File button ONLY shown if file has been created & sent */}
+                    {isCaseFileReadyAndSent(apt) && (
+                      <button
+                        onClick={() => window.open(`/prescription/view?id=${apt.id || apt._id}`, '_blank')}
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                        title="View Patient's Completed Case File & Prescription Pad"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-emerald-600" /> View Case File
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

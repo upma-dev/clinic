@@ -31,12 +31,9 @@ export async function POST(req: NextRequest) {
     // Update booking status
     await updateBookingStatus(id, 'cancelled');
 
-    // Also cancel or skip any queue entry for this booking
+    // Remove any queue entry for this cancelled booking
     const db = await getDb();
-    await db.collection(COLLECTIONS.queue).updateOne(
-      { bookingId: id },
-      { $set: { status: 'skipped' } }
-    );
+    await db.collection(COLLECTIONS.queue).deleteOne({ bookingId: id });
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

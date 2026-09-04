@@ -24,8 +24,14 @@ export function minutesToTime(totalMinutes: number): string {
 
 export function parseHHMM(value: string): number {
   if (!value) return 0;
-  const [h, m] = value.split(':').map(Number);
-  return h * 60 + (m || 0);
+  if (/am|pm/i.test(value)) {
+    return timeToMinutes(value.trim());
+  }
+  const clean = value.replace(/[^0-9:]/g, '');
+  const [hStr, mStr] = clean.split(':');
+  const h = parseInt(hStr, 10) || 0;
+  const m = parseInt(mStr, 10) || 0;
+  return h * 60 + m;
 }
 
 /** All slots for a day depending on type (morning + evening sessions for clinic, or online timings). */
@@ -40,12 +46,9 @@ export function generateDaySlots(settings: ClinicSettings, type: 'clinic' | 'onl
     [parseHHMM(settings.morningStart), parseHHMM(settings.morningEnd)],
     [parseHHMM(settings.eveningStart), parseHHMM(settings.eveningEnd)],
   ];
-  const breakStart = parseHHMM(settings.lunchStart || '14:00');
-  const breakEnd = parseHHMM(settings.lunchEnd || '17:00');
 
   for (const [start, end] of ranges) {
     for (let t = start; t < end; t += duration) {
-      if (t >= breakStart && t < breakEnd) continue;
       slots.push(minutesToTime(t));
     }
   }
@@ -69,8 +72,8 @@ export function isBookingClosedForDate(date: string, settings: ClinicSettings): 
   if (date < today) return true;
 
   if (date === today) {
-    const cutoff = settings.bookingCutoffHour * 60 + (settings.bookingCutoffMinute || 0);
     const current = now.getHours() * 60 + now.getMinutes();
+    const cutoff = (settings.bookingCutoffHour ?? 19) * 60 + (settings.bookingCutoffMinute ?? 30);
     if (current >= cutoff) return true;
   }
 
@@ -85,17 +88,11 @@ export function buildSlotAvailability(
   totalBookings: number,
   type: 'clinic' | 'online' = 'online'
 ): { slots: SlotAvailability[]; fullyBooked: boolean; bookingClosed: boolean; isClosedDay?: boolean; isHoliday?: boolean } {
-  // 1. Check if online booking is completely disabled
-  if (type === 'online' && !settings.enableOnlineBooking) {
-    return { slots: [], fullyBooked: true, bookingClosed: true, isClosedDay: true };
-  }
-
-  // 2. Check if date is in the past or cutoff is reached
+  // 1. Check if date is in the past or cutoff is reached
   const bookingClosed = isBookingClosedForDate(date, settings);
-  const maxLimit = type === 'online' ? (settings.onlineMaxDailyBooking || settings.maxBookingsPerDay) : settings.maxBookingsPerDay;
-  const fullyBooked = totalBookings >= maxLimit;
+  const fullyBooked = false;
 
-  // 3. Check weekday availability
+  // 2. Check weekday availability
   const [year, month, day] = date.split('-').map(Number);
   const utcDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
   const dayOfWeek = utcDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
@@ -125,17 +122,32 @@ export function buildSlotAvailability(
     let status: SlotStatus = 'available';
     
     // Check if slot is blocked by doctor or already booked
-    if (blockedTimes.has(time)) {
+    const isBlocked = settings.blockedSlots?.some((s) => {
+      if (s.date !== date) return false;
+      const slotMin = timeToMinutes(time);
+      if (s.time.includes('-')) {
+        const [start, end] = s.time.split('-').map(t => t.trim());
+        const startMin = parseHHMM(start);
+        const endMin = parseHHMM(end);
+        return slotMin >= startMin && slotMin <= endMin;
+      }
+      const blockedMin = s.time.includes('AM') || s.time.includes('PM') || s.time.includes('am') || s.time.includes('pm')
+        ? timeToMinutes(s.time)
+        : parseHHMM(s.time);
+      return slotMin === blockedMin;
+    }) || blockedTimes.has(time);
+
+    if (isBlocked) {
       status = 'blocked';
     } else if (bookedTimes.has(time)) {
       status = 'booked';
     } else if (fullyBooked || bookingClosed) {
-      status = 'blocked';
+      status = 'booked';
     } else if (date === todayStr) {
       // Check if slot is within booking buffer time from now
       const slotMinutes = timeToMinutes(time);
       if (slotMinutes - currentMinutes < bufferMinutes) {
-        status = 'blocked';
+        status = 'booked';
       }
     }
 

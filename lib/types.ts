@@ -67,6 +67,8 @@ export interface Booking {
 
   // Follow-up details (Offline Flow)
   nextScheduleDate?: string;
+  rescheduleReason?: string;
+  rescheduledAt?: string;
 
   // Payment Tracking
   paymentStatus?: PaymentStatus;
@@ -82,6 +84,23 @@ export interface Booking {
   meetingLink?: string;
   meetingPassword?: string;
   meetingLinkSent?: boolean;
+  amount?: number;
+
+  // Prescription & Case File
+  prescriptionData?: {
+    medicines: string;
+    advice?: string;
+    generatedAt: string;
+  };
+  prescriptionSent?: boolean;
+  hasCaseFile?: boolean;
+
+  // Hold & Lock Concurrency Fields
+  holdExpiresAt?: string; // ISO timestamp when temporary reservation expires (e.g. 15 mins)
+  slotConflict?: boolean; // Set to true if payment arrived after hold expired and slot was taken
+  cancellationReason?: string; // Reason for automatic timeout or conflict cancellation
+  autoRefundId?: string; // ID of automatic Razorpay refund if conflict occurred
+  refundStatus?: string; // e.g. 'processed' | 'pending' | 'mock_refund'
 }
 
 export interface DailyQueue {
@@ -113,7 +132,6 @@ export interface QueueEntry {
 
 export interface ClinicSettings {
   _id?: string;
-  doctorName?: string;
   // Dynamic Clinic Settings
   clinicName: string;
   clinicLogo?: string;
@@ -124,17 +142,12 @@ export interface ClinicSettings {
   morningEnd: string; // "14:00"
   eveningStart: string; // "17:00"
   eveningEnd: string; // "21:00"
-  lunchStart: string; // "14:00"
-  lunchEnd: string; // "17:00"
   availableDays: string[]; // e.g. ["Monday", "Tuesday", ...]
   holidays: string[]; // e.g. ["2026-12-25"]
   consultationFee: number;
   onlineConsultationFee: number;
   offlineConsultationFee: number;
   emergencyFee: number;
-  maxPatientsPerHour: number;
-  maxOnlineSlots: number;
-  maxOfflineSlots: number;
   slotDurationMinutes: number; // e.g. 15
   reminderTimeMinutes: number; // e.g. 60
   emailTemplates: {
@@ -149,20 +162,15 @@ export interface ClinicSettings {
     followUp: string;
     prescriptionReady: string;
   };
-  maxBookingsPerDay: number;
   bookingCutoffHour: number; // 24h, default 19
   bookingCutoffMinute: number; // default 30 → 7:30 PM
   blockedSlots: { date: string; time: string }[];
 
   // Online Booking Specific Controls
-  enableOnlineBooking: boolean;
   onlineDays: string[]; // e.g. ["Monday", "Tuesday"]
   onlineStart: string; // "10:00"
   onlineEnd: string; // "16:00"
   onlineSlotDuration: number; // e.g. 20
-  onlineBreakStart: string; // "13:00"
-  onlineBreakEnd: string; // "14:00"
-  onlineMaxDailyBooking: number; // e.g. 15
   bookingBufferHours: number; // e.g. 2
   onlineHolidayExceptions: string[];
   onlinePaymentMandatory: boolean;

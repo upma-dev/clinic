@@ -20,8 +20,8 @@ export default function Hero({ settings, cms }: HeroProps) {
   const containerRef = useRef(null);
 
   const clinicName = settings?.clinicName || siteConfig.clinicName;
-  const doctorName = cms?.aboutTitle || siteConfig.doctorName;
-  const credentials = cms?.aboutSubtitle || siteConfig.credentials;
+  const doctorName = siteConfig.doctorName;
+  const credentials = siteConfig.credentials;
   const phone = settings?.clinicPhone || siteConfig.phone;
   const timings = settings 
     ? `${formatHHMM(settings.morningStart)} - ${formatHHMM(settings.morningEnd)} | ${formatHHMM(settings.eveningStart)} - ${formatHHMM(settings.eveningEnd)}` 
@@ -29,15 +29,15 @@ export default function Hero({ settings, cms }: HeroProps) {
   const location = settings?.clinicAddress || cms?.contactAddress || siteConfig.location;
   const areaName = getAreaFromAddress(location);
 
-  const heroTitleLine1 = cms?.heroTitleLine1 || "Advanced Skin, Hair";
-  const heroTitleLine2 = cms?.heroTitleLine2 || "Laser Care in Ujjain";
-  const heroSubtitle = cms?.heroSubtitle || "Best Dermatologist in Ujjain for Advanced Skin, Hair & Laser Care";
-  const heroDescription = cms?.heroDescription || "Trusted by thousands of patients for modern dermatology and hair restoration. Managed by expert Dr. Prateek Tiwari, MBBS, DVD (Dermatology).";
-  const heroBadge1 = cms?.heroBadge1 || "BEST DERMATOLOGIST IN UJJAIN";
-  const heroBadge2 = cms?.heroBadge2 || "TOP RATED SKIN SPECIALIST";
-  const heroExperienceBadge = cms?.heroExperienceBadge || "12+ Years";
-  const heroExperienceText = cms?.heroExperienceText || "EXPERIENCE";
-  const heroImageUrl = cms?.heroImageUrl || "/assets/doctor.png";
+  const heroTitleLine1 = "Advanced Skin, Hair";
+  const heroTitleLine2 = "Laser Care in Ujjain";
+  const heroSubtitle = "Best Dermatologist in Ujjain for Advanced Skin, Hair & Laser Care";
+  const heroDescription = "Trusted by thousands of patients for modern dermatology and hair restoration. Managed by expert Dr. Prateek Tiwari, MBBS, DVD (Dermatology).";
+  const heroBadge1 = "BEST DERMATOLOGIST IN UJJAIN";
+  const heroBadge2 = "TOP RATED SKIN SPECIALIST";
+  const heroExperienceBadge = "12+ Years";
+  const heroExperienceText = "EXPERIENCE";
+  const heroImageUrl = "/assets/doctor.png";
 
   const schemaData = {
     "@context": "https://schema.org",

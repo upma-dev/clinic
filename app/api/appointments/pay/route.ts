@@ -105,11 +105,9 @@ export async function POST(req: Request) {
         const db = await getDb();
         const booking = await db.collection(COLLECTIONS.bookings).findOne({ id: receipt });
         if (booking) {
-          if (booking.bookingType === 'online' || booking.source === 'online') {
-            fee = settings.onlineConsultationFee || settings.consultationFee || 500;
-          } else {
-            fee = settings.offlineConsultationFee || settings.consultationFee || 200;
-          }
+          fee = booking.amount || (booking.bookingType === 'online' || booking.source === 'online'
+            ? (settings.onlineConsultationFee || settings.consultationFee || 500)
+            : (settings.offlineConsultationFee || settings.consultationFee || 200));
         }
       }
     }

@@ -9,11 +9,11 @@ import {
 import WalkInForm from './WalkInForm';
 import QueueControls from './QueueControls';
 import AppointmentsList from './AppointmentsList';
-import WalkinRequestsList from './WalkinRequestsList';
+
 import TelemedicineAdmin from './TelemedicineAdmin';
 import type { Booking, DailyQueue, QueueEntry, DbNotification } from '@/lib/types';
 
-type StaffTab = 'queue' | 'walkin' | 'schedule' | 'requests' | 'telemedicine';
+type StaffTab = 'queue' | 'walkin' | 'schedule' | 'telemedicine';
 
 interface StaffDashboardProps {
   onLogout: () => void;
@@ -179,12 +179,17 @@ export default function StaffDashboard({ onLogout }: StaffDashboardProps) {
         paymentMethod,
       }),
     });
-    refresh();
     if (res.ok) {
       const data = await res.json();
+      await refresh();
       return data;
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Action failed.');
+      await refresh();
     }
   };
+
 
   const markNotifRead = async (id: string) => {
     await fetch('/api/notifications', {
@@ -376,20 +381,7 @@ export default function StaffDashboard({ onLogout }: StaffDashboardProps) {
                       {tab === 'schedule' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
                     </button>
 
-                    <button
-                      onClick={() => {
-                        setTab('requests');
-                        if (typeof window !== 'undefined' && window.innerWidth < 1024) setSidebarOpen(false);
-                      }}
-                      className={`w-full px-3 py-2.5 rounded-xl text-left text-xs font-bold flex items-center justify-between transition-all ${
-                        tab === 'requests' ? 'bg-gradient-to-r from-[#0B1B29] to-[#1B4F72] text-white shadow-md' : 'text-slate-700 hover:bg-white/80 hover:text-slate-900'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className={`font-bold ${tab === 'requests' ? 'text-emerald-400' : 'text-slate-400'}`}>•</span> Walk-in Requests
-                      </span>
-                      {tab === 'requests' && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
-                    </button>
+
                   </div>
                 )}
               </div>
@@ -477,8 +469,8 @@ export default function StaffDashboard({ onLogout }: StaffDashboardProps) {
               <div>
                 <h1 className="font-playfair text-base sm:text-lg font-bold text-gray-900 leading-tight">
                   {tab === 'queue' && 'Live Queue Management'}
+                  {tab === 'walkin' && 'Walk-in Registration'}
                   {tab === 'schedule' && "Today's Schedule & Arrivals"}
-                  {tab === 'requests' && 'Patient Self-Checkin Requests'}
                   {tab === 'telemedicine' && 'Online Video Consultations'}
                 </h1>
                 <p className="text-[10px] sm:text-xs text-gray-500 font-medium">Reception & OPD Operations Console</p>
@@ -538,7 +530,7 @@ export default function StaffDashboard({ onLogout }: StaffDashboardProps) {
               role="staff"
             />
           )}
-          {tab === 'requests' && <WalkinRequestsList />}
+
           {tab === 'telemedicine' && (
             <div className="max-w-4xl mx-auto">
               <TelemedicineAdmin />

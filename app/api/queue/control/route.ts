@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
             await sendAutomatedEmail(booking.email, 'followUp', {
               name: booking.name,
               date: nextScheduleDate,
-              doctorName: settings?.doctorName || 'Dr. Prateek Tiwari',
+              doctorName: 'Dr. Prateek Tiwari',
               address: settings?.clinicAddress || 'Clinic Address'
             }).catch(err => console.error('Failed to send follow-up email:', err));
           }

@@ -20,12 +20,15 @@ export async function POST() {
     const date = todayISO();
     const db = await getDb();
 
-    // 1. Fetch today's bookings that are confirmed, booked, or arrived
+    // 1. Fetch today's bookings that are confirmed, booked, arrived, or paid
     const todayBookings = await db
       .collection<Booking>(COLLECTIONS.bookings)
       .find({
         date,
-        status: { $in: ['confirmed', 'booked', 'arrived', 'checked-in'] },
+        $or: [
+          { status: { $in: ['confirmed', 'booked', 'arrived', 'checked-in'] } },
+          { paymentStatus: { $in: ['paid', 'Paid'] }, status: { $nin: ['cancelled', 'no-show', 'completed'] } }
+        ]
       })
       .toArray();
 

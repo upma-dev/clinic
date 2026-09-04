@@ -5,55 +5,94 @@ import { ObjectId } from 'mongodb';
 export async function POST(req: Request) {
   try {
     const data = await req.json();
-    const { appointmentId, type, medicines, advice } = data;
+    const { appointmentId, type, medicines, advice, pdfBase64 } = data;
 
-    if (!appointmentId || !medicines) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    if (!appointmentId) {
+      return NextResponse.json({ error: 'Missing appointment ID' }, { status: 400 });
     }
+
+    const effectiveMedicines = (medicines || '').trim();
+    const effectiveAdvice = (advice || '').trim();
 
     const db = await getDb();
-    const collection = type === 'telemedicine' ? COLLECTIONS.telemedicine_appointments : COLLECTIONS.bookings;
-    const filter = type === 'telemedicine' ? { _id: new ObjectId(appointmentId) } : { id: appointmentId }; // Clinic bookings use string 'id' in our schema currently, tele uses Mongo _id. Wait, actually clinic bookings might use _id too. I'll check both.
-
-    let updateQuery;
-    if (type === 'telemedicine') {
-      updateQuery = { _id: new ObjectId(appointmentId) };
-    } else {
-      // For clinic bookings, we might have mapped it as a string id or it's an ObjectId.
-      // I'll try ObjectId first, and if not, string. In earlier code, `id` was usually the stringified `_id`.
-      try {
-        updateQuery = { _id: new ObjectId(appointmentId) };
-      } catch {
-        updateQuery = { id: appointmentId };
-      }
-    }
-
-    const update = {
-      $set: {
-        prescriptionData: {
-          medicines,
-          advice,
-          generatedAt: new Date().toISOString()
-        }
-      }
+    const setFields: any = {
+      status: 'completed',
+      prescriptionSent: true,
+      hasCaseFile: true,
+      prescriptionData: {
+        medicines: effectiveMedicines,
+        advice: effectiveAdvice,
+        generatedAt: new Date().toISOString()
+      },
+      updatedAt: new Date().toISOString()
     };
-
-    const result = await db.collection(collection).updateOne(updateQuery, update);
-
-    // If it didn't match using ObjectId for clinic, fallback to string 'id'
-    let finalQuery = updateQuery;
-    if (result.matchedCount === 0 && type !== 'telemedicine') {
-       await db.collection(collection).updateOne({ id: appointmentId }, update);
-       finalQuery = { id: appointmentId };
+    if (pdfBase64) {
+      setFields.prescriptionPdfBase64 = pdfBase64;
     }
+
+    const update = { $set: setFields };
+
+    let matched = false;
+    let foundBooking: any = null;
+
+    // 1. Try bookings collection by string id (SKNHB-...)
+    let res = await db.collection(COLLECTIONS.bookings).updateOne({ id: appointmentId }, update);
+    if (res.matchedCount > 0) {
+      matched = true;
+      foundBooking = await db.collection(COLLECTIONS.bookings).findOne({ id: appointmentId });
+    }
+
+    // 2. Try bookings collection by ObjectId if valid
+    if (!matched && ObjectId.isValid(appointmentId)) {
+      try {
+        res = await db.collection(COLLECTIONS.bookings).updateOne({ _id: new ObjectId(appointmentId) }, update);
+        if (res.matchedCount > 0) {
+          matched = true;
+          foundBooking = await db.collection(COLLECTIONS.bookings).findOne({ _id: new ObjectId(appointmentId) });
+        }
+      } catch {}
+    }
+
+    // 3. Try telemedicine_appointments by ObjectId
+    if (!matched && ObjectId.isValid(appointmentId)) {
+      try {
+        res = await db.collection(COLLECTIONS.telemedicine_appointments).updateOne({ _id: new ObjectId(appointmentId) }, update);
+        if (res.matchedCount > 0) {
+          matched = true;
+          foundBooking = await db.collection(COLLECTIONS.telemedicine_appointments).findOne({ _id: new ObjectId(appointmentId) });
+        }
+      } catch {}
+    }
+
+    // 4. Try telemedicine_appointments by string id
+    if (!matched) {
+      res = await db.collection(COLLECTIONS.telemedicine_appointments).updateOne({ id: appointmentId }, update);
+      if (res.matchedCount > 0) {
+        matched = true;
+        foundBooking = await db.collection(COLLECTIONS.telemedicine_appointments).findOne({ id: appointmentId });
+      }
+    }
+
+    // Also check if there is an existing telemedicine_consultations document
+    try {
+      await db.collection(COLLECTIONS.telemedicine_consultations).updateOne(
+        { appointmentId },
+        {
+          $set: {
+            prescriptionText: medicines,
+            lifestyleAdvice: advice,
+            updatedAt: new Date().toISOString()
+          }
+        }
+      );
+    } catch {}
 
     // Trigger prescription ready email automation
-    const booking = await db.collection(collection).findOne(finalQuery);
-    if (booking && booking.email) {
+    if (foundBooking && foundBooking.email) {
       const { sendAutomatedEmail } = await import('@/lib/email');
-      await sendAutomatedEmail(booking.email, 'prescriptionReady', {
-        name: booking.name,
-        notes: advice || 'No additional notes. Please view details in your patient portal.'
+      await sendAutomatedEmail(foundBooking.email, 'prescriptionReady', {
+        name: foundBooking.name,
+        notes: advice || 'Official Medical Prescription Pad has been released. Please view and download from your patient portal.'
       }).catch(err => console.error('Failed to send prescription ready email:', err));
     }
 

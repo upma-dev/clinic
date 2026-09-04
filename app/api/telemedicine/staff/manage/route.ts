@@ -420,7 +420,17 @@ export async function GET(req: Request) {
       ...a,
       _id: a._id.toString(),
       sourceCollection: 'telemedicine_appointments',
-      createdAt: a.createdAt
+      createdAt: a.createdAt,
+      hasCaseFile: Boolean(
+        a.hasCaseFile === true ||
+        a.prescriptionSent === true ||
+        a.caseFileSent === true ||
+        (a.prescriptionPdfBase64 && String(a.prescriptionPdfBase64).length > 50) ||
+        (a.prescriptionData && (
+          (typeof a.prescriptionData.medicines === 'string' && a.prescriptionData.medicines.trim().length > 0) ||
+          (typeof a.prescriptionData.advice === 'string' && a.prescriptionData.advice.trim().length > 0)
+        ))
+      )
     }));
 
     // 2. Fetch from bookings where bookingType === 'online'
@@ -464,6 +474,8 @@ export async function GET(req: Request) {
                 if (payData.status === 'paid') {
                   const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
                   const paidTime = new Date().toISOString();
+                  const { addQueueEntry, getNextTokenNumber } = await import('@/lib/db/queue');
+                  const tokenNumber = await getNextTokenNumber(booking.date);
 
                   await db.collection(COLLECTIONS.bookings).updateOne(
                     { id: booking.id },
@@ -471,6 +483,7 @@ export async function GET(req: Request) {
                       $set: {
                         paymentStatus: 'paid',
                         status: 'confirmed',
+                        tokenNumber,
                         razorpayPaymentId: payData.payments?.[0]?.payment_id || 'auto_verify',
                         amountPaid: payData.amount_paid / 100,
                         paidAt: paidTime,
@@ -481,15 +494,29 @@ export async function GET(req: Request) {
                     }
                   );
 
+                  await addQueueEntry({
+                    date: booking.date,
+                    tokenNumber,
+                    name: booking.name,
+                    phone: booking.phone,
+                    source: 'online',
+                    bookingId: booking.id,
+                    status: 'waiting',
+                    estimatedWaitMinutes: 0,
+                    scheduledTime: booking.time,
+                    createdAt: new Date().toISOString(),
+                  });
+
                   await createNotification(
                     'payment_received',
                     'Online Payment Verified (Auto)',
-                    `${booking.name} paid Rs. ${payData.amount_paid / 100} online. Video link generated.`
+                    `${booking.name} paid Rs. ${payData.amount_paid / 100} online. Video link generated.${tokenNumber ? ` Token #${tokenNumber}` : ''}`
                   );
 
                   // Update in memory object
                   booking.paymentStatus = 'paid';
                   booking.status = 'confirmed';
+                  booking.tokenNumber = tokenNumber;
                   booking.razorpayPaymentId = payData.payments?.[0]?.payment_id || 'auto_verify';
                   booking.amountPaid = payData.amount_paid / 100;
                   booking.paidAt = paidTime;
@@ -531,7 +558,21 @@ export async function GET(req: Request) {
       razorpayPaymentLinkId: b.razorpayPaymentLinkId,
       sourceCollection: 'bookings',
       createdAt: b.createdAt,
-      service: b.service
+      service: b.service,
+      hasCaseFile: Boolean(
+        b.hasCaseFile === true ||
+        b.prescriptionSent === true ||
+        b.caseFileSent === true ||
+        (b.prescriptionPdfBase64 && String(b.prescriptionPdfBase64).length > 50) ||
+        (b.prescriptionData && (
+          (typeof b.prescriptionData.medicines === 'string' && b.prescriptionData.medicines.trim().length > 0) ||
+          (typeof b.prescriptionData.advice === 'string' && b.prescriptionData.advice.trim().length > 0)
+        ))
+      ),
+      prescriptionSent: Boolean(b.prescriptionSent),
+      caseFileSent: Boolean(b.caseFileSent),
+      prescriptionPdfBase64: b.prescriptionPdfBase64 || null,
+      prescriptionData: b.prescriptionData || null
     }));
 
     // Combine and sort by createdAt descending
@@ -626,15 +667,22 @@ export async function POST(req: Request) {
                 paymentLinkUrl = payData.short_url;
                 paymentLinkId = payData.id;
               } else {
-                throw new Error(payData.error?.description || 'Failed to create payment link');
+                console.error('Razorpay payment link creation failed:', payData);
+                return NextResponse.json({ 
+                  error: `Razorpay API Error: ${payData.error?.description || 'Failed to create payment link'}` 
+                }, { status: 400 });
               }
             } catch (err: any) {
-              return NextResponse.json({ error: err.message || 'Payment link creation failed' }, { status: 500 });
+              console.error('Razorpay payment link API error:', err);
+              return NextResponse.json({ 
+                error: `Razorpay Connection Error: ${err.message || 'API connection failed'}` 
+              }, { status: 500 });
             }
           } else {
             paymentLinkId = 'mock_plink_' + Date.now();
             paymentLinkUrl = `${new URL(req.url).origin}/telemedicine/pay-mock?bookingId=${booking.id}`;
           }
+
 
           await db.collection(COLLECTIONS.bookings).updateOne(
             { id: appointmentId },
@@ -678,12 +726,15 @@ export async function POST(req: Request) {
                 const payData = await payRes.json();
                 if (payData.status === 'paid') {
                   const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
+                  const { addQueueEntry, getNextTokenNumber } = await import('@/lib/db/queue');
+                  const tokenNumber = await getNextTokenNumber(booking.date);
                   await db.collection(COLLECTIONS.bookings).updateOne(
                     { id: booking.id },
                     {
                       $set: {
                         paymentStatus: 'paid',
                         status: 'confirmed',
+                        tokenNumber,
                         razorpayPaymentId: payData.payments?.[0]?.payment_id || 'manual_verify',
                         amountPaid: payData.amount_paid / 100,
                         paidAt: new Date().toISOString(),
@@ -693,7 +744,21 @@ export async function POST(req: Request) {
                       }
                     }
                   );
-                  return NextResponse.json({ success: true, paid: true, paymentStatus: 'paid', status: 'confirmed' });
+
+                  await addQueueEntry({
+                    date: booking.date,
+                    tokenNumber,
+                    name: booking.name,
+                    phone: booking.phone,
+                    source: 'online',
+                    bookingId: booking.id,
+                    status: 'waiting',
+                    estimatedWaitMinutes: 0,
+                    scheduledTime: booking.time,
+                    createdAt: new Date().toISOString(),
+                  });
+
+                  return NextResponse.json({ success: true, paid: true, paymentStatus: 'paid', status: 'confirmed', tokenNumber });
                 }
               }
             } catch (err) {
@@ -703,12 +768,16 @@ export async function POST(req: Request) {
             const roomPass = Math.random().toString(36).substring(2, 8).toUpperCase();
             const confirmSettings = await getClinicSettings();
             const fee = confirmSettings.onlineConsultationFee || confirmSettings.consultationFee || 500;
+            const { addQueueEntry, getNextTokenNumber } = await import('@/lib/db/queue');
+            const tokenNumber = await getNextTokenNumber(booking.date);
+
             await db.collection(COLLECTIONS.bookings).updateOne(
               { id: booking.id },
               {
                 $set: {
                   paymentStatus: 'paid',
                   status: 'confirmed',
+                  tokenNumber,
                   razorpayPaymentId: 'mock_payment_' + Date.now(),
                   amountPaid: fee,
                   paidAt: new Date().toISOString(),
@@ -718,7 +787,21 @@ export async function POST(req: Request) {
                 }
               }
             );
-            return NextResponse.json({ success: true, paid: true, paymentStatus: 'paid', status: 'confirmed' });
+
+            await addQueueEntry({
+              date: booking.date,
+              tokenNumber,
+              name: booking.name,
+              phone: booking.phone,
+              source: 'online',
+              bookingId: booking.id,
+              status: 'waiting',
+              estimatedWaitMinutes: 0,
+              scheduledTime: booking.time,
+              createdAt: new Date().toISOString(),
+            });
+
+            return NextResponse.json({ success: true, paid: true, paymentStatus: 'paid', status: 'confirmed', tokenNumber });
           }
         }
         return NextResponse.json({ success: true, paid: false, paymentStatus: booking.paymentStatus, status: booking.status });
