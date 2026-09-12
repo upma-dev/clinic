@@ -43,11 +43,11 @@ export default function BlogSection({ cms }: BlogSectionProps = {}) {
   }, []);
 
   return (
-    <section id="blogs" className="py-12 sm:py-16 bg-stone-50 text-left border-t border-gray-200">
+    <section id="blogs" className="py-6 sm:py-12 bg-stone-50 text-left border-t border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Descriptive Section Header for SEO and Accessibility */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-12 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-6 sm:mb-10 gap-4">
           <div>
             <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-3">
               📚 Skin Hub Health Articles
@@ -88,9 +88,9 @@ export default function BlogSection({ cms }: BlogSectionProps = {}) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {blogs.map((post) => (
+            {blogs.map((post, idx) => (
               <article
-                key={post.id}
+                key={post._id || `${post.id || 'blog'}-${idx}`}
                 className="bg-white border border-gray-300 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all hover:border-[#1B4F72] flex flex-col h-full transform hover:-translate-y-1 duration-200"
               >
                 {/* Featured Visual Port: contains category tag mask */}

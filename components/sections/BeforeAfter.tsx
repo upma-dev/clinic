@@ -144,8 +144,8 @@ function SliderCard({ item }: { item: BeforeAfterCase }) {
           <MoveHorizontal className="w-5 h-5 text-gray-300" />
         </div>
 
-        {/* Slider area (must stretch equally across cards) */}
-        <div className="flex-1 flex min-h-[260px] sm:min-h-[280px]">
+        {/* Slider area (fixed height so fill images render on all screens) */}
+        <div className="w-full h-[260px] sm:h-[280px] relative overflow-hidden">
           <div
             ref={containerRef}
             className={`relative w-full h-full overflow-hidden select-none ${
@@ -255,7 +255,23 @@ function PlaceholderImage({ label, color }: { label: string; color: string }) {
 // ─────────────────────────────────────────────────────────
 // Main exported section
 // ─────────────────────────────────────────────────────────
-export default function BeforeAfter() {
+import type { CMSContent } from '@/lib/types';
+
+export default function BeforeAfter({ cms }: { cms?: CMSContent | null }) {
+  const dynamicCases: BeforeAfterCase[] = cms?.beforeAfterCases?.length
+    ? cms.beforeAfterCases.map((c, index) => ({
+        id: Number(c.id) || index + 1,
+        treatment: c.treatment,
+        duration: c.duration,
+        sessions: c.sessions,
+        tag: c.tag || 'Treatment',
+        beforeSrc: c.beforeSrc || '/assets/before1.jpeg',
+        afterSrc: c.afterSrc || '/assets/after1.jpeg',
+        beforeAlt: `${c.treatment} Before`,
+        afterAlt: `${c.treatment} After`,
+      }))
+    : cases;
+
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -270,10 +286,10 @@ export default function BeforeAfter() {
   };
 
   return (
-    <section id="before-after" className="py-12 sm:py-16 bg-white">
+    <section id="before-after" className="py-6 sm:py-12 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section header */}
-        <div className="text-center mb-14">
+        <div className="text-center mb-6 sm:mb-10">
           <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-3">
             <Sparkles className="w-3.5 h-3.5 mr-1" />
             Real Results
@@ -299,7 +315,7 @@ export default function BeforeAfter() {
 
         {/* Tab pills — desktop treatment filter */}
         <div className="hidden sm:flex justify-center gap-2 mb-10 flex-wrap">
-          {cases.map((c, i) => (
+          {dynamicCases.map((c, i) => (
             <button
               key={c.id}
               onClick={() => scrollTo(i)}
@@ -320,7 +336,7 @@ export default function BeforeAfter() {
           className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 items-stretch gap-6 overflow-x-auto sm:overflow-visible pb-4 sm:pb-0 snap-x snap-mandatory sm:snap-none scrollbar-hide"
           style={{ scrollbarWidth: 'none' }}
         >
-          {cases.map((item) => (
+          {dynamicCases.map((item) => (
             <div key={item.id} className="min-w-[280px] sm:min-w-0 snap-start h-full">
               <SliderCard item={item} />
             </div>
@@ -329,7 +345,7 @@ export default function BeforeAfter() {
 
         {/* Mobile dot indicators */}
         <div className="flex sm:hidden justify-center gap-2 mt-6">
-          {cases.map((_, i) => (
+          {dynamicCases.map((_, i) => (
             <button
               key={i}
               onClick={() => scrollTo(i)}

@@ -3,7 +3,7 @@
 import React, { useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Calendar, Award, ShieldCheck, MapPin, Star, Sparkles } from 'lucide-react';
+import { Calendar, Award, ShieldCheck, MapPin, Star, Sparkles, Clock } from 'lucide-react';
 import { siteConfig } from '@/config/site';
 import { motion, useScroll, useTransform, useReducedMotion, useMotionValue, useSpring } from 'motion/react';
 import Script from 'next/script';
@@ -91,7 +91,7 @@ export default function Hero({ settings, cms }: HeroProps) {
       id="home"
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      className="relative pt-24 sm:pt-28 pb-8 sm:pb-12 bg-[#F9FBFC] overflow-hidden lg:min-h-[80vh] lg:flex lg:items-center"
+      className="relative pt-16 sm:pt-24 pb-4 sm:pb-8 bg-[#F9FBFC] overflow-hidden lg:min-h-[80vh] lg:flex lg:items-center"
     >
       <Script
         id="medical-clinic-schema"
@@ -152,10 +152,10 @@ export default function Hero({ settings, cms }: HeroProps) {
       </motion.div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
 
           {/* Main Content */}
-          <div className="lg:col-span-7 text-left space-y-6">
+          <div className="lg:col-span-7 text-left space-y-3.5 sm:space-y-6">
 
             {/* Badges */}
             <motion.div
@@ -204,26 +204,37 @@ export default function Hero({ settings, cms }: HeroProps) {
               {heroDescription}
             </motion.p>
 
-            {/* Location/Hours Card */}
+            {/* Redesigned Sleek Location & Hours Card */}
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.1, delay: shouldReduceMotion ? 0 : 0.6, ease: customEase }}
-              className="bg-white p-4 border border-gray-150 rounded-2xl shadow-sm max-w-md flex items-start space-x-4"
+              className="bg-gradient-to-br from-[#F0FDF4] via-white to-[#F0FDFA] p-4 sm:p-4.5 border border-teal-200/90 rounded-2xl shadow-xs shadow-teal-900/5 max-w-lg flex items-start space-x-3.5"
             >
-              <div className="bg-primary/10 p-3 rounded-full shrink-0">
-                <MapPin className="w-6 h-6 text-primary" />
+              <div className="bg-teal-600 text-white p-3 rounded-xl shrink-0 shadow-xs mt-0.5">
+                <MapPin className="w-5 h-5" />
               </div>
-              <div className="space-y-1">
-                <span className="text-[10px] uppercase font-black tracking-widest text-primary block">
-                  Clinical Center: {areaName}, Ujjain
-                </span>
-                <span className="font-sans text-sm font-bold text-gray-900 block">
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center text-[10px] font-black uppercase tracking-widest text-teal-800 bg-teal-100/90 px-2.5 py-0.5 rounded-full border border-teal-200">
+                    📍 Clinical Center
+                  </span>
+                  <a
+                    href="https://www.google.com/maps?q=Rishi+Nagar+Ujjain+Madhya+Pradesh"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-bold text-teal-700 hover:text-teal-900 underline flex items-center gap-0.5 shrink-0"
+                  >
+                    View Map ↗
+                  </a>
+                </div>
+                <p className="font-sans text-xs sm:text-sm font-bold text-gray-900 leading-snug">
                   {location}
-                </span>
-                <span className="font-sans text-[12px] text-gray-600 block">
-                  {timings}
-                </span>
+                </p>
+                <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-teal-900 font-semibold pt-1.5 border-t border-teal-100/80">
+                  <Clock className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <span>OPD Hours: {timings}</span>
+                </div>
               </div>
             </motion.div>
 
@@ -232,31 +243,21 @@ export default function Hero({ settings, cms }: HeroProps) {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: shouldReduceMotion ? 0 : 0.1, delay: shouldReduceMotion ? 0 : 0.7, ease: customEase }}
-              className="mt-6 flex flex-wrap gap-4"
+              className="mt-6 grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 sm:gap-3.5"
             >
               <Link
                 href="/booking"
-                className="group inline-flex items-center justify-center px-8 py-4 bg-primary hover:brightness-90 text-white font-sans font-bold text-sm lg:text-base rounded-xl transition-colors duration-150 cursor-pointer"
+                className="group inline-flex items-center justify-center px-3 sm:px-7 py-3 sm:py-3.5 bg-primary hover:brightness-95 text-white font-sans font-bold text-xs sm:text-sm lg:text-base rounded-xl transition-all duration-150 shadow-md shadow-teal-900/10 cursor-pointer text-center whitespace-nowrap"
               >
-                <Calendar className="w-5 h-5 mr-2 transition-transform duration-150 ease-out group-hover:translate-x-[2px]" />
+                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5 sm:mr-2 transition-transform duration-150 ease-out group-hover:scale-110 shrink-0" />
                 Book Consultation
               </Link>
               <Link
                 href="/services"
-                className="inline-flex items-center justify-center px-8 py-4 border-2 border-primary text-primary hover:border-[#1F2A28] font-sans font-bold text-sm rounded-xl bg-transparent transition-colors duration-150"
+                className="inline-flex items-center justify-center px-3 sm:px-7 py-3 sm:py-3.5 border-2 border-primary text-primary hover:bg-primary/5 font-sans font-bold text-xs sm:text-sm rounded-xl bg-white/80 backdrop-blur-xs transition-colors duration-150 text-center whitespace-nowrap"
               >
                 View All Services
               </Link>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.2, delay: shouldReduceMotion ? 0 : 0.75, ease: customEase }}
-              className="pt-4 flex items-center space-x-3 text-xs font-sans font-bold text-gray-400 uppercase tracking-widest cursor-default"
-            >
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Verified 4.8★ Rated Clinic in Rishi Nagar, Ujjain (694+ Reviews)</span>
             </motion.div>
           </div>
 
@@ -266,7 +267,7 @@ export default function Hero({ settings, cms }: HeroProps) {
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: shouldReduceMotion ? 0 : 0.6, delay: shouldReduceMotion ? 0 : 0.2, ease: customEase }}
-            className="lg:col-span-5 relative flex justify-center mt-12 lg:mt-0 group cursor-default"
+            className="lg:col-span-5 relative flex justify-center mt-2 sm:mt-4 lg:mt-0 group cursor-default"
           >
             <div className="relative w-full max-w-[360px] aspect-[3/4]">
 

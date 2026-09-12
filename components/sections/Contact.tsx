@@ -6,11 +6,12 @@
 
 'use client';
 
-import React from 'react';
-import { MapPin, Phone, Mail, Clock, ShieldAlert } from 'lucide-react';
+import React, { useState } from 'react';
+import { MapPin, Phone, Mail, Clock, ShieldAlert, LifeBuoy } from 'lucide-react';
 import { siteConfig } from '@/config/site';
 import type { ClinicSettings, CMSContent } from '@/lib/types';
 import { formatHHMM, getClosedDaysString } from '@/lib/slots';
+import SupportFormModal from './SupportFormModal';
 
 interface ContactProps {
   settings?: ClinicSettings | null;
@@ -18,6 +19,7 @@ interface ContactProps {
 }
 
 export default function Contact({ settings, cms }: ContactProps) {
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const location = settings?.clinicAddress || cms?.contactAddress || siteConfig.location;
   const phone = settings?.clinicPhone || siteConfig.phone;
   const whatsapp = settings?.clinicPhone?.replace(/[^0-9]/g, '') || siteConfig.whatsapp;
@@ -37,7 +39,8 @@ export default function Contact({ settings, cms }: ContactProps) {
     : "https://www.google.com/maps?q=Rishi+Nagar+Ujjain+Madhya+Pradesh&output=embed";
 
   return (
-    <section id="contact" className="py-12 sm:py-16 bg-[#F9F9FB]">
+    <section id="contact" className="py-6 sm:py-12 bg-[#F9F9FB]">
+      <SupportFormModal isOpen={isSupportModalOpen} onClose={() => setIsSupportModalOpen(false)} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Responsive Grid layout for contact details vs map localization */}
@@ -48,14 +51,23 @@ export default function Contact({ settings, cms }: ContactProps) {
             <div className="space-y-6">
               
               <div className="space-y-2">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider">
-                  Contact Matrix
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider">
+                    Contact Matrix
+                  </span>
+                  <button
+                    onClick={() => setIsSupportModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs hover:from-emerald-700 hover:to-teal-700 transition-all shadow-sm flex items-center gap-1.5"
+                  >
+                    <LifeBuoy className="w-3.5 h-3.5" />
+                    <span>🆘 हेल्प सपोर्ट टिकट भेजें</span>
+                  </button>
+                </div>
                 <h3 className="font-playfair text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                   Reach Our Desk
                 </h3>
                 <p className="font-sans text-xs sm:text-sm text-gray-800 leading-relaxed font-semibold">
-                  Have skin queries or scheduling doubts? Call our desk directly or send us custom consultation messages.
+                  Have skin queries or scheduling doubts? Call our desk directly or send us custom support messages.
                 </p>
               </div>
 

@@ -44,9 +44,9 @@ export default function About({ cms }: AboutProps) {
   const credentialsList = defaultCredentials;
 
   return (
-    <section id="about" className="py-12 sm:py-16 bg-white">
+    <section id="about" className="py-6 sm:py-12 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
 
           {/* Left — Doctor image with floating badge */}
           <motion.div
@@ -139,17 +139,17 @@ export default function About({ cms }: AboutProps) {
               ))}
             </ul>
 
-            <div className="flex flex-wrap gap-3 pt-2">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 pt-2 w-full">
               <Link
                 href="/booking"
-                className="inline-flex items-center px-6 py-3 bg-primary hover:bg-accent hover:text-gray-900 text-white font-sans font-bold text-sm rounded-xl transition-all duration-300"
+                className="inline-flex items-center justify-center px-2 sm:px-6 py-3 bg-primary hover:bg-accent hover:text-gray-900 text-white font-sans font-bold text-xs sm:text-sm rounded-xl transition-all duration-300 text-center whitespace-nowrap"
               >
-                <Calendar className="w-4 h-4 mr-2" />
+                <Calendar className="w-4 h-4 mr-1.5 shrink-0" />
                 Book Consultation
               </Link>
               <Link
                 href="/about"
-                className="inline-flex items-center px-6 py-3 border-2 border-primary text-primary font-sans font-bold text-sm rounded-xl hover:bg-primary hover:text-white transition-all duration-300"
+                className="inline-flex items-center justify-center px-2 sm:px-6 py-3 border-2 border-primary text-primary font-sans font-bold text-xs sm:text-sm rounded-xl hover:bg-primary hover:text-white transition-all duration-300 text-center whitespace-nowrap"
               >
                 Read Full Profile
               </Link>

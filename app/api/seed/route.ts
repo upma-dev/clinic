@@ -51,7 +51,7 @@ async function seedDatabase() {
       onlineConsultationFee: 600,
       offlineConsultationFee: 700,
       emergencyFee: 1200,
-      slotDurationMinutes: 15,
+      slotDurationMinutes: 3,
       reminderTimeMinutes: 60,
       bookingCutoffHour: 20,
       bookingCutoffMinute: 0,

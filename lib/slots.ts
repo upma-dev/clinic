@@ -35,16 +35,27 @@ export function parseHHMM(value: string): number {
 }
 
 /** All slots for a day depending on type (morning + evening sessions for clinic, or online timings). */
+/** All slots for a day depending on type (morning + evening sessions for clinic, or online timings). */
 export function generateDaySlots(settings: ClinicSettings, type: 'clinic' | 'online' = 'online'): string[] {
   const slots: string[] = [];
 
-  // Use the exact same morning and evening shift ranges for both online & offline consultations
-  const duration = type === 'online' 
-    ? (settings.onlineSlotDuration ?? settings.slotDurationMinutes ?? 15)
-    : (settings.slotDurationMinutes ?? settings.onlineSlotDuration ?? 15);
+  if (type === 'clinic') {
+    // Offline OPD: Uses settings.morningStart and settings.morningEnd (Default: 11:00 AM to 03:00 PM)
+    const start = parseHHMM(settings.morningStart || '11:00'); 
+    const end = parseHHMM(settings.morningEnd || '15:00');   
+    const duration = settings.slotDurationMinutes || 3; // custom minutes per slot (default 3 min)
+
+    for (let t = start; t < end; t += duration) {
+      slots.push(minutesToTime(t));
+    }
+    return slots;
+  }
+
+  // Online Consultations
+  const duration = settings.onlineSlotDuration ?? 15;
   const ranges = [
-    [parseHHMM(settings.morningStart), parseHHMM(settings.morningEnd)],
-    [parseHHMM(settings.eveningStart), parseHHMM(settings.eveningEnd)],
+    [parseHHMM(settings.morningStart || '09:00'), parseHHMM(settings.morningEnd || '14:00')],
+    [parseHHMM(settings.eveningStart || '17:00'), parseHHMM(settings.eveningEnd || '21:00')],
   ];
 
   for (const [start, end] of ranges) {
@@ -67,9 +78,17 @@ export function todayISO(): string {
 
 export function isBookingClosedForDate(date: string, settings: ClinicSettings): boolean {
   const now = new Date();
-  const today = new Date().toISOString().split('T')[0];
+  const today = now.toISOString().split('T')[0];
 
   if (date < today) return true;
+
+  // Enforce max advance booking days limit (e.g. 3 days open starting from today)
+  const maxDays = settings.advanceBookingDays ?? 7;
+  const maxDateObj = new Date();
+  maxDateObj.setDate(maxDateObj.getDate() + (maxDays - 1));
+  const maxDateStr = maxDateObj.toISOString().split('T')[0];
+
+  if (date > maxDateStr) return true;
 
   if (date === today) {
     const current = now.getHours() * 60 + now.getMinutes();
@@ -137,9 +156,40 @@ export function buildSlotAvailability(
       return slotMin === blockedMin;
     }) || blockedTimes.has(time);
 
+    // Offline clinic rule: pre-book buffer slots in every 1-hour block if enabled in admin settings
+    const isAutoReserveEnabled = settings.autoReserveHourlyBufferSlots ?? true;
+    const duration = settings.slotDurationMinutes || 3;
+    const bufferCount = settings.hourlyBufferCount ?? 3;
+    const slotMin = timeToMinutes(time);
+    const minInHour = slotMin % 60;
+    const slotsPerHour = Math.max(1, Math.floor(60 / duration));
+    const slotIndexInHour = Math.floor(minInHour / duration);
+
+    let isPreBookedSlot = false;
+    if (isAutoReserveEnabled && type === 'clinic') {
+      if (bufferCount >= 4) {
+        isPreBookedSlot = (slotIndexInHour + 1) % Math.max(1, Math.floor(slotsPerHour / 4)) === 0;
+      } else if (bufferCount === 2) {
+        isPreBookedSlot = slotIndexInHour === Math.floor(slotsPerHour / 2) || slotIndexInHour === (slotsPerHour - 1);
+      } else if (bufferCount === 1) {
+        isPreBookedSlot = slotIndexInHour === (slotsPerHour - 1);
+      } else {
+        const step = Math.max(1, Math.floor(slotsPerHour / 4));
+        isPreBookedSlot = (slotIndexInHour === step - 1 || slotIndexInHour === step * 2 - 1 || slotIndexInHour === step * 3 - 1);
+      }
+    }
+
+    const isExplicitUnblocked = settings.blockedSlots?.some(
+      (s) => s.date === date && s.time === `UNBLOCK_${time}`
+    );
+
+    if (isExplicitUnblocked) {
+      isPreBookedSlot = false;
+    }
+
     if (isBlocked) {
       status = 'blocked';
-    } else if (bookedTimes.has(time)) {
+    } else if (bookedTimes.has(time) || isPreBookedSlot) {
       status = 'booked';
     } else if (fullyBooked || bookingClosed) {
       status = 'booked';

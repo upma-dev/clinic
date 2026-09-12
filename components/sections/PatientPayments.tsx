@@ -73,18 +73,18 @@ export default function PatientPayments({ patient }: PatientPaymentsProps) {
 
       const payData = await payRes.json();
 
-      if (payData.isMock) {
-        setMockPaymentModal({
-          show: true,
-          appointmentId: bk.id,
-          fee: payData.amount / 100,
-          orderId: payData.orderId,
-          keyId: payData.keyId,
-        });
-        return;
-      }
+      // Always open UPI QR payment modal
+      setMockPaymentModal({
+        show: true,
+        appointmentId: bk.id,
+        fee: payData.amount / 100,
+        orderId: payData.orderId,
+        keyId: payData.keyId,
+      });
+      return;
 
-      // Live Razorpay script loading
+      /* 
+      // Live Razorpay script loading commented out
       const loaded = await loadRazorpayScript();
       if (!loaded) {
         throw new Error('Razorpay SDK failed to load.');
@@ -141,6 +141,7 @@ export default function PatientPayments({ patient }: PatientPaymentsProps) {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
+      */
     } catch (err: any) {
       setError(err.message || 'Payment initiation failed.');
       setPayingId(null);

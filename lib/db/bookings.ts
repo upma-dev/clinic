@@ -70,7 +70,13 @@ export async function autoSkipOverdueBookings(dbInstance?: any): Promise<number>
   }
 }
 
+let lastCleanupTime = 0;
+
 export async function cleanupExpiredUnpaidBookings(dbInstance?: any): Promise<void> {
+  const now = Date.now();
+  if (now - lastCleanupTime < 60000) return;
+  lastCleanupTime = now;
+
   try {
     const db = dbInstance || (await getDb());
     const nowIso = new Date().toISOString();
@@ -106,7 +112,7 @@ export async function cleanupExpiredUnpaidBookings(dbInstance?: any): Promise<vo
 export async function getBookingsByDate(date: string): Promise<Booking[]> {
   try {
     const db = await getDb();
-    await cleanupExpiredUnpaidBookings(db);
+    cleanupExpiredUnpaidBookings(db).catch(() => {});
     const nowIso = new Date().toISOString();
 
     const docs = await db
@@ -136,7 +142,7 @@ export async function getBookingsByDate(date: string): Promise<Booking[]> {
 export async function getAllBookingsForDate(date: string): Promise<Booking[]> {
   try {
     const db = await getDb();
-    await cleanupExpiredUnpaidBookings(db);
+    cleanupExpiredUnpaidBookings(db).catch(() => {});
     const docs = await db
       .collection<Booking>(COLLECTIONS.bookings)
       .find({ date })
@@ -152,7 +158,7 @@ export async function getAllBookingsForDate(date: string): Promise<Booking[]> {
 export async function getAllBookings(limit = 2000): Promise<Booking[]> {
   try {
     const db = await getDb();
-    await cleanupExpiredUnpaidBookings(db);
+    cleanupExpiredUnpaidBookings(db).catch(() => {});
     const docs = await db
       .collection<Booking>(COLLECTIONS.bookings)
       .find({})
@@ -177,7 +183,7 @@ export async function getBookingById(id: string): Promise<Booking | null> {
 export async function countBookingsForDate(date: string, type?: 'clinic' | 'online'): Promise<number> {
   try {
     const db = await getDb();
-    await cleanupExpiredUnpaidBookings(db);
+    cleanupExpiredUnpaidBookings(db).catch(() => {});
     const nowIso = new Date().toISOString();
 
     const query: any = {

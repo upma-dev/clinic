@@ -147,6 +147,8 @@ export interface ClinicSettings {
   consultationFee: number;
   onlineConsultationFee: number;
   offlineConsultationFee: number;
+  onlinePreBookingFee?: number;
+  offlinePreBookingFee?: number;
   emergencyFee: number;
   slotDurationMinutes: number; // e.g. 15
   reminderTimeMinutes: number; // e.g. 60
@@ -164,9 +166,10 @@ export interface ClinicSettings {
   };
   bookingCutoffHour: number; // 24h, default 19
   bookingCutoffMinute: number; // default 30 → 7:30 PM
+  advanceBookingDays?: number; // e.g. 3 or 7 (how many days into future booking is open)
   blockedSlots: { date: string; time: string }[];
 
-  // Online Booking Specific Controls
+  // Online & Offline Booking Specific Controls
   onlineDays: string[]; // e.g. ["Monday", "Tuesday"]
   onlineStart: string; // "10:00"
   onlineEnd: string; // "16:00"
@@ -174,7 +177,12 @@ export interface ClinicSettings {
   bookingBufferHours: number; // e.g. 2
   onlineHolidayExceptions: string[];
   onlinePaymentMandatory: boolean;
+  offlinePaymentMandatory?: boolean;
+  onlinePaymentTiming?: 'pre_booking' | 'after_booking';
+  offlinePaymentTiming?: 'pre_booking' | 'after_booking';
   onlineRequiresApproval: boolean;
+  autoReserveHourlyBufferSlots?: boolean;
+  hourlyBufferCount?: number;
 }
 
 export interface BlogPost {
@@ -224,6 +232,8 @@ export interface CMSContent {
   testimonials: { name: string; text: string; rating: number; role: string; imageUrl?: string }[];
   gallery: { id: string; title: string; imageUrl: string; category: string }[];
   certificates?: { id: string; title: string; institution: string; image: string }[];
+  beforeAfterCases?: { id: string; treatment: string; duration: string; sessions: string; tag: string; beforeSrc: string; afterSrc: string }[];
+  videos?: { id: string; title: string; desc: string; duration: string; videoUrl: string; thumbnail: string }[];
 
   contactAddress: string;
   contactPhone: string;
@@ -242,10 +252,26 @@ export interface CMSContent {
   clinicPhotos: string[];
 }
 
+export interface SupportTicket {
+  _id?: string;
+  id: string;
+  ticketId: string;
+  name: string;
+  phone: string;
+  email?: string;
+  category: 'booking_issue' | 'payment_issue' | 'consultation_help' | 'general';
+  subject: string;
+  message: string;
+  status: 'open' | 'in_progress' | 'resolved';
+  reply?: string;
+  repliedAt?: string;
+  createdAt: string;
+}
+
 export interface DbNotification {
   _id?: string;
   id: string;
-  type: 'booking_new' | 'booking_cancelled' | 'payment_received' | 'reminder_sent' | 'reschedule_request' | 'queue_update' | 'patient_arrived' | 'doctor-call';
+  type: 'booking_new' | 'booking_cancelled' | 'payment_received' | 'reminder_sent' | 'reschedule_request' | 'queue_update' | 'patient_arrived' | 'doctor-call' | 'support_ticket';
   title: string;
   message: string;
   read: boolean;

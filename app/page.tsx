@@ -95,8 +95,10 @@ import { getClinicSettings } from '@/lib/db/settings';
 import { getCmsSettings } from '@/lib/db/cms';
 
 export default async function Home() {
-  const settings = await getClinicSettings();
-  const cms = await getCmsSettings();
+  const [settings, cms] = await Promise.all([
+    getClinicSettings(),
+    getCmsSettings(),
+  ]);
 
   return (
     <main className="min-h-screen bg-surface selection:bg-accent/30 selection:text-text">
@@ -116,10 +118,10 @@ export default async function Home() {
       <Certificates cms={cms} />
 
       {/* 6. Before & After */}
-      <BeforeAfter />
+      <BeforeAfter cms={cms} />
 
       {/* 7. Video — educational content */}
-      <VideoSection />
+      <VideoSection cms={cms} />
 
       {/* 8. Testimonials — social proof */}
       <Testimonials cms={cms} />

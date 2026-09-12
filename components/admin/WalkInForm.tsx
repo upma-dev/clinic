@@ -83,46 +83,48 @@ export default function WalkInForm({ onRegistered }: WalkInFormProps) {
 
         const payData = await payRes.json();
 
-        if (payData.isMock) {
-          payload.razorpay_order_id = payData.orderId;
-          payload.razorpay_payment_id = 'mock_payment';
-          payload.razorpay_signature = 'mock_signature';
-        } else {
-          const loaded = await loadRazorpayScript();
-          if (!loaded) throw new Error('Failed to load payment checkout script');
+        // Default to mock/QR payment payload
+        payload.razorpay_order_id = payData.orderId;
+        payload.razorpay_payment_id = 'mock_payment';
+        payload.razorpay_signature = 'mock_signature';
 
-          const rzResult = await new Promise<any>((resolve, reject) => {
-            const options = {
-              key: payData.keyId,
-              amount: payData.amount,
-              currency: payData.currency,
-              name: 'Skin Hub Clinic',
-              description: `Walk-in Consultation - ${name}`,
-              order_id: payData.orderId,
-              handler: (response: any) => {
-                resolve(response);
-              },
-              prefill: {
-                name,
-                contact: phone,
-              },
-              theme: {
-                color: '#1B4F72',
-              },
-              modal: {
-                ondismiss: () => {
-                  reject(new Error('Payment cancelled'));
-                }
+        /* 
+        // Live Razorpay SDK commented out
+        const loaded = await loadRazorpayScript();
+        if (!loaded) throw new Error('Failed to load payment checkout script');
+
+        const rzResult = await new Promise<any>((resolve, reject) => {
+          const options = {
+            key: payData.keyId,
+            amount: payData.amount,
+            currency: payData.currency,
+            name: 'Skin Hub Clinic',
+            description: `Walk-in Consultation - ${name}`,
+            order_id: payData.orderId,
+            handler: (response: any) => {
+              resolve(response);
+            },
+            prefill: {
+              name,
+              contact: phone,
+            },
+            theme: {
+              color: '#1B4F72',
+            },
+            modal: {
+              ondismiss: () => {
+                reject(new Error('Payment cancelled'));
               }
-            };
-            const rzp = new (window as any).Razorpay(options);
-            rzp.open();
-          });
+            }
+          };
+          const rzp = new (window as any).Razorpay(options);
+          rzp.open();
+        });
 
-          payload.razorpay_order_id = rzResult.razorpay_order_id;
-          payload.razorpay_payment_id = rzResult.razorpay_payment_id;
-          payload.razorpay_signature = rzResult.razorpay_signature;
-        }
+        payload.razorpay_order_id = rzResult.razorpay_order_id;
+        payload.razorpay_payment_id = rzResult.razorpay_payment_id;
+        payload.razorpay_signature = rzResult.razorpay_signature;
+        */
       }
 
       const res = await fetch('/api/queue/walk-in', {

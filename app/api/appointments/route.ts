@@ -245,12 +245,22 @@ export async function POST(req: NextRequest) {
     const uniqueId = Math.floor(10000 + Math.random() * 90000);
     const appointmentId = `SKNHB-${uniqueId}`;
 
-    const fee = bookingType === 'online'
-      ? (settings.onlineConsultationFee || settings.consultationFee || 600)
-      : (settings.offlineConsultationFee || settings.consultationFee || 700);
+    const isOnline = bookingType === 'online';
+    const isPreBooking = isOnline
+      ? ((settings.onlinePaymentTiming ?? (settings.onlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'pre_booking')
+      : ((settings.offlinePaymentTiming ?? (settings.offlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'pre_booking');
 
-    // Determine if upfront payment checkout is required
-    const requiresPayment = bookingType === 'online' && !!settings.onlinePaymentMandatory;
+    const requiresPayment = isPreBooking;
+
+    const totalFee = isOnline
+      ? (settings.onlineConsultationFee || settings.consultationFee || 500)
+      : (settings.offlineConsultationFee || settings.consultationFee || 200);
+
+    const preBookingFee = isOnline
+      ? (settings.onlinePreBookingFee ?? totalFee)
+      : (settings.offlinePreBookingFee ?? 50);
+
+    const fee = requiresPayment ? preBookingFee : totalFee;
 
     // Initial booking status transitions
     // All public bookings (online or offline type) start as 'pending' and require admin approval

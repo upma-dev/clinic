@@ -125,9 +125,9 @@ export default function BlogListingClient({ initialPosts, initialTotal, settings
         ) : (
           <div className="space-y-12">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {blogs.map((post) => (
+              {blogs.map((post, idx) => (
                 <article
-                  key={post.id}
+                  key={post._id || `${post.id || 'blog'}-${idx}`}
                   className="bg-white border border-gray-300 rounded-2xl overflow-hidden hover:shadow-xl transition-all hover:border-[#1B4F72] flex flex-col h-full transform hover:-translate-y-1 duration-200"
                 >
                   {/* Image */}

@@ -13,6 +13,7 @@ interface DoctorBookingHistoryProps {
   bookings: Booking[];
   settings?: ClinicSettings | null;
   onRefresh: () => void;
+  initialFilter?: 'all' | 'offline' | 'online';
   onAction?: (
     id: string,
     action: string,
@@ -31,9 +32,17 @@ export default function DoctorBookingHistory({
   bookings,
   settings,
   onRefresh,
+  initialFilter = 'all',
   onAction,
 }: DoctorBookingHistoryProps) {
   const [clinicSettings, setClinicSettings] = useState<ClinicSettings | null>(settings || null);
+  const [patientTypeFilter, setPatientTypeFilter] = useState<'all' | 'offline' | 'online'>(initialFilter);
+
+  React.useEffect(() => {
+    if (initialFilter) {
+      setPatientTypeFilter(initialFilter);
+    }
+  }, [initialFilter]);
 
   React.useEffect(() => {
     if (settings) {
@@ -146,7 +155,7 @@ export default function DoctorBookingHistory({
     }
   }, [quickRange, jumpDate, yesterdayStr, customStartDate, customEndDate, clinicOpeningDate]);
 
-  // Filter bookings according to range and global search
+  // Filter bookings according to range, patient type, and global search
   const filteredBookings = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
 
@@ -160,7 +169,14 @@ export default function DoctorBookingHistory({
         return false;
       }
 
-      // 2. Search Query Check
+      // 2. Patient Type Selector (Offline vs Online)
+      if (patientTypeFilter === 'online') {
+        if (b.bookingType !== 'online' || b.source === 'walk-in') return false;
+      } else if (patientTypeFilter === 'offline') {
+        if (b.bookingType === 'online' && b.source !== 'walk-in') return false;
+      }
+
+      // 3. Search Query Check
       if (q) {
         const matchName = b.name?.toLowerCase().includes(q);
         const matchPhone = b.phone?.includes(q);
@@ -175,7 +191,7 @@ export default function DoctorBookingHistory({
 
       return true;
     });
-  }, [bookings, rangeStart, rangeEnd, searchQuery]);
+  }, [bookings, rangeStart, rangeEnd, searchQuery, patientTypeFilter]);
 
   // Helper to categorize status
   const isCompleted = (status?: string) => {
@@ -683,6 +699,55 @@ export default function DoctorBookingHistory({
 
       {/* ── Filter & Navigation Bar ── */}
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-4">
+        {/* Tier 1: Patient Category Selector Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 flex items-center gap-1">
+              <Users className="w-3.5 h-3.5 text-primary" />
+              Patient Category:
+            </span>
+            <div className="inline-flex rounded-xl bg-gray-100 p-1 border border-gray-200">
+              <button
+                type="button"
+                onClick={() => setPatientTypeFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  patientTypeFilter === 'all'
+                    ? 'bg-white text-gray-900 shadow-xs border border-gray-200'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                👥 ALL PATIENTS
+              </button>
+              <button
+                type="button"
+                onClick={() => setPatientTypeFilter('offline')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  patientTypeFilter === 'offline'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🏥 OFFLINE / CLINIC
+              </button>
+              <button
+                type="button"
+                onClick={() => setPatientTypeFilter('online')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  patientTypeFilter === 'online'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🌐 ONLINE / TELE-CONSULT
+              </button>
+            </div>
+          </div>
+
+          <div className="text-xs font-bold text-gray-500">
+            Showing: <span className="text-gray-900 font-extrabold">{filteredBookings.length} records</span> ({patientTypeFilter === 'offline' ? 'Offline / Clinic Only' : patientTypeFilter === 'online' ? 'Online Tele-consult Only' : 'All Consultations'})
+          </div>
+        </div>
+
         {/* Quick Range Selector Chips */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100">
           <div className="flex flex-wrap items-center gap-1.5">

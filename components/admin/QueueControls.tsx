@@ -51,6 +51,7 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
   const [error, setError] = useState('');
   const [whatsappModal, setWhatsappModal] = useState<{ url: string; patientName: string; action: string } | null>(null);
   const [queueFilter, setQueueFilter] = useState<'waiting' | 'done' | 'skipped' | 'cancelled' | 'all'>('waiting');
+  const [queueTypeFilter, setQueueTypeFilter] = useState<'all' | 'offline' | 'online'>('all');
   const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null);
 
   // ── Walk-in Modal ──
@@ -170,6 +171,15 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
   }, []);
 
   // ── Categorize bookings ──
+  const offlineTotalCount = todayBookings.filter(b => b.bookingType !== 'online' || b.source === 'walk-in').length;
+  const onlineTotalCount = todayBookings.filter(b => b.bookingType === 'online' && b.source !== 'walk-in').length;
+
+  const typeFilteredBookings = todayBookings.filter(b => {
+    if (queueTypeFilter === 'online') return b.bookingType === 'online' && b.source !== 'walk-in';
+    if (queueTypeFilter === 'offline') return b.bookingType !== 'online' || b.source === 'walk-in';
+    return true;
+  });
+
   // Sort strictly by slot time
   const sortBookings = (list: Booking[]) =>
     [...list].sort((a, b) => {
@@ -180,7 +190,7 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
     });
 
   // Filter out pending and cancelled bookings from the active queue
-  const activeQueueBookings = todayBookings.filter(
+  const activeQueueBookings = typeFilteredBookings.filter(
     b => b.status !== 'cancelled' && (b.status !== 'pending' || String(b.paymentStatus || '').toLowerCase() === 'paid')
   );
 
@@ -195,8 +205,8 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
   const servingBooking = activeQueueBookings.find(b => SERVING_STATUSES.includes(b.status as string));
   const doneBookings = sortBookings(activeQueueBookings.filter(b => DONE_STATUSES.includes(b.status as string)));
   const skippedBookings = sortBookings(activeQueueBookings.filter(b => SKIPPED_STATUSES.includes(b.status as string)));
-  const cancelledBookings = sortBookings(todayBookings.filter(b => b.status === 'cancelled'));
-  const totalToday = todayBookings.length;
+  const cancelledBookings = sortBookings(typeFilteredBookings.filter(b => b.status === 'cancelled'));
+  const totalToday = typeFilteredBookings.length;
 
   // ── Estimated wait (15 min per patient) ──
   const estWaitMinutes = waitingBookings.length * 15;
@@ -259,66 +269,68 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
 
       const payData = await payRes.json();
 
-      if (payData.isMock) {
-        const verifyRes = await fetch('/api/appointments/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            razorpay_order_id: payData.orderId,
-            razorpay_payment_id: 'mock_payment',
-            razorpay_signature: 'mock_signature',
-            bookingId: bkId,
-            isMock: true,
-          }),
-        });
-        if (!verifyRes.ok) throw new Error('Mock payment verification failed');
-      } else {
-        const loaded = await loadRazorpayScript();
-        if (!loaded) throw new Error('Failed to load payment checkout script');
+      // Default to direct mock/QR verification
+      const verifyRes = await fetch('/api/appointments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razorpay_order_id: payData.orderId,
+          razorpay_payment_id: 'mock_payment',
+          razorpay_signature: 'mock_signature',
+          bookingId: bkId,
+          isMock: true,
+        }),
+      });
+      if (!verifyRes.ok) throw new Error('Payment verification failed');
 
-        await new Promise((resolve, reject) => {
-          const options = {
-            key: payData.keyId,
-            amount: payData.amount,
-            currency: payData.currency,
-            name: 'Skin Hub Clinic',
-            description: `OPD Consultation - ${bkName}`,
-            order_id: payData.orderId,
-            handler: async (response: any) => {
-              try {
-                const verifyRes = await fetch('/api/appointments/verify', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_signature: response.razorpay_signature,
-                    bookingId: bkId,
-                  }),
-                });
-                if (!verifyRes.ok) throw new Error('Verification failed');
-                resolve(true);
-              } catch (err) {
-                reject(err);
-              }
-            },
-            prefill: {
-              name: bkName,
-              contact: bkPhone,
-            },
-            theme: {
-              color: '#1B4F72',
-            },
-            modal: {
-              ondismiss: () => {
-                reject(new Error('Payment cancelled'));
-              }
+      /* 
+      // Live Razorpay SDK commented out
+      const loaded = await loadRazorpayScript();
+      if (!loaded) throw new Error('Failed to load payment checkout script');
+
+      await new Promise((resolve, reject) => {
+        const options = {
+          key: payData.keyId,
+          amount: payData.amount,
+          currency: payData.currency,
+          name: 'Skin Hub Clinic',
+          description: `OPD Consultation - ${bkName}`,
+          order_id: payData.orderId,
+          handler: async (response: any) => {
+            try {
+              const verifyRes = await fetch('/api/appointments/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  bookingId: bkId,
+                }),
+              });
+              if (!verifyRes.ok) throw new Error('Verification failed');
+              resolve(true);
+            } catch (err) {
+              reject(err);
             }
-          };
-          const rzp = new (window as any).Razorpay(options);
-          rzp.open();
-        });
-      }
+          },
+          prefill: {
+            name: bkName,
+            contact: bkPhone,
+          },
+          theme: {
+            color: '#1B4F72',
+          },
+          modal: {
+            ondismiss: () => {
+              reject(new Error('Payment cancelled'));
+            }
+          }
+        };
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      });
+      */
 
       await bookingAction(bkId, action, { paymentMethod: 'online', ...extra });
     } catch (err: any) {
@@ -1000,87 +1012,163 @@ export default function QueueControls({ todayBookings, onUpdate, role }: QueueCo
             </div>
           </div>
 
-          {/* Sub-Header Filter Bar */}
-          <div className="flex gap-2 overflow-x-auto pb-1 items-center">
-            <button
-              type="button"
-              onClick={() => setQueueFilter('waiting')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                queueFilter === 'waiting'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              ⏳ Waiting Queue
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                queueFilter === 'waiting' ? 'bg-white text-blue-800' : 'bg-blue-100 text-blue-800'
-              }`}>
-                {waitingBookings.length}
-              </span>
-            </button>
+          {/* ── 2-TIER REDESIGNED QUEUE CONTROL AREA ── */}
+          <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
+            {/* TIER 1: QUEUE CONSULTATION CATEGORY */}
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-0.5">
+                Queue Consultation Category
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQueueTypeFilter('all')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-between transition-all cursor-pointer border ${
+                    queueTypeFilter === 'all'
+                      ? 'bg-[#0B1B29] text-white border-[#0B1B29] shadow-md'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base">👥</span>
+                    <span>ALL QUEUE</span>
+                  </span>
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                    queueTypeFilter === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {todayBookings.length}
+                  </span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setQueueFilter('done')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                queueFilter === 'done'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              ✅ Done
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                queueFilter === 'done' ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-800'
-              }`}>
-                {doneBookings.length}
-              </span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setQueueTypeFilter('offline')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-between transition-all cursor-pointer border ${
+                    queueTypeFilter === 'offline'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-600 shadow-md'
+                      : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-50/60'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base">🏥</span>
+                    <span>OFFLINE / CLINIC QUEUE</span>
+                  </span>
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                    queueTypeFilter === 'offline' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {offlineTotalCount}
+                  </span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setQueueFilter('skipped')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                queueFilter === 'skipped'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              🚷 Skipped
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                queueFilter === 'skipped' ? 'bg-white text-amber-800' : 'bg-amber-100 text-amber-800'
-              }`}>
-                {skippedBookings.length}
-              </span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setQueueTypeFilter('online')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-between transition-all cursor-pointer border ${
+                    queueTypeFilter === 'online'
+                      ? 'bg-gradient-to-r from-sky-600 to-blue-700 text-white border-sky-600 shadow-md'
+                      : 'bg-white text-sky-800 border-sky-200 hover:bg-sky-50/60'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base">🌐</span>
+                    <span>ONLINE VIDEO QUEUE</span>
+                  </span>
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                    queueTypeFilter === 'online' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'
+                  }`}>
+                    {onlineTotalCount}
+                  </span>
+                </button>
+              </div>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => setQueueFilter('cancelled')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                queueFilter === 'cancelled'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              ❌ Cancelled
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                queueFilter === 'cancelled' ? 'bg-white text-rose-800' : 'bg-rose-100 text-rose-800'
-              }`}>
-                {cancelledBookings.length}
-              </span>
-            </button>
+            {/* TIER 2: QUEUE STATUS SUB-FILTERS */}
+            <div className="pt-2 border-t border-slate-200/60">
+              <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-0.5">
+                Filter Queue Status
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setQueueFilter('waiting')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    queueFilter === 'waiting'
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  ⏳ Waiting Queue
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    queueFilter === 'waiting' ? 'bg-white text-blue-800' : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {waitingBookings.length}
+                  </span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setQueueFilter('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                queueFilter === 'all'
-                  ? 'bg-gray-800 text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              📋 All ({totalToday})
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setQueueFilter('done')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    queueFilter === 'done'
+                      ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  ✅ Done
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    queueFilter === 'done' ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {doneBookings.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQueueFilter('skipped')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    queueFilter === 'skipped'
+                      ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  🚷 Skipped
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    queueFilter === 'skipped' ? 'bg-white text-amber-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {skippedBookings.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQueueFilter('cancelled')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    queueFilter === 'cancelled'
+                      ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  ❌ Cancelled
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    queueFilter === 'cancelled' ? 'bg-white text-rose-800' : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {cancelledBookings.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQueueFilter('all')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    queueFilter === 'all'
+                      ? 'bg-slate-800 border-slate-800 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  📋 All ({totalToday})
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Currently Serving Banner */}

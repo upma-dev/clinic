@@ -1,5 +1,6 @@
 import { getDb, COLLECTIONS } from '../mongodb';
 import type { BlogPost } from '../types';
+import { cache } from '../cache';
 
 const SEED_BLOGS: BlogPost[] = [
   {
@@ -22,6 +23,23 @@ const SEED_BLOGS: BlogPost[] = [
 ];
 
 export async function getBlogPosts(options?: {
+  admin?: boolean;
+  category?: string;
+  search?: string;
+  featured?: boolean;
+  page?: number;
+  limit?: number;
+}): Promise<{ posts: BlogPost[]; total: number }> {
+  // Do not cache admin queries
+  if (options?.admin) {
+    return fetchBlogPostsFromDb(options);
+  }
+
+  const cacheKey = `public:blogs:${options?.category || 'All'}:${options?.search || ''}:${options?.featured}:${options?.page || 1}:${options?.limit || 100}`;
+  return cache.getOrSet(cacheKey, () => fetchBlogPostsFromDb(options), 300); // 5 min TTL
+}
+
+async function fetchBlogPostsFromDb(options?: {
   admin?: boolean;
   category?: string;
   search?: string;
@@ -89,11 +107,13 @@ export async function getBlogPosts(options?: {
 }
 
 export async function getBlogPostById(id: string): Promise<BlogPost | null> {
-  const db = await getDb();
-  const doc = await db.collection<BlogPost>(COLLECTIONS.blogs).findOne({ id });
-  if (!doc) return null;
-  const { _id, ...rest } = doc;
-  return { ...rest, _id: _id?.toString() };
+  return cache.getOrSet(`public:blogs:detail:${id}`, async () => {
+    const db = await getDb();
+    const doc = await db.collection<BlogPost>(COLLECTIONS.blogs).findOne({ id });
+    if (!doc) return null;
+    const { _id, ...rest } = doc;
+    return { ...rest, _id: _id?.toString() };
+  }, 300);
 }
 
 export async function addBlogPost(post: BlogPost): Promise<BlogPost> {
@@ -103,6 +123,7 @@ export async function addBlogPost(post: BlogPost): Promise<BlogPost> {
   doc.status = doc.status || 'published';
   doc.featured = !!doc.featured;
   await db.collection(COLLECTIONS.blogs).insertOne(doc);
+  cache.invalidatePattern('public:blogs');
   return post;
 }
 
@@ -112,12 +133,14 @@ export async function updateBlogPost(id: string, patch: Partial<BlogPost>): Prom
   const result = await db
     .collection(COLLECTIONS.blogs)
     .updateOne({ id }, { $set: doc });
+  cache.invalidatePattern('public:blogs');
   return result.modifiedCount > 0;
 }
 
 export async function deleteBlogPost(id: string): Promise<boolean> {
   const db = await getDb();
   const result = await db.collection(COLLECTIONS.blogs).deleteOne({ id });
+  cache.invalidatePattern('public:blogs');
   return result.deletedCount > 0;
 }
 

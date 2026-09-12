@@ -115,7 +115,7 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
     <nav id="site-header-nav" className="fixed top-0 left-0 w-full z-50">
       {/* Dynamic top banner alert */}
       {localCms?.bannerEnabled && localCms?.bannerText && (
-        <div className="bg-gradient-to-r from-primary to-accent text-white py-2 px-4 text-center text-[10px] sm:text-xs font-bold font-sans tracking-wide z-50 relative animate-pulse animate-duration-3000">
+        <div className="bg-[#0B1B29] text-white border-b border-gray-800 py-2 px-4 text-center text-[10px] sm:text-xs font-bold font-sans tracking-wide z-50 relative">
           <a href={localCms.bannerLink || '/booking'} className="hover:underline transition-all block">
             {localCms.bannerText}
           </a>
@@ -123,21 +123,21 @@ export default function Navbar({ settings, cms }: { settings?: ClinicSettings | 
       )}
       
       {/* Top Info Bar */}
-      <div className="bg-[#0B1B29] text-teal-400 py-1.5 px-4 hidden md:flex items-center justify-between text-[11px] font-sans font-bold tracking-wide">
+      <div className="bg-[#0B1B29] text-gray-300 py-1.5 px-4 hidden md:flex items-center justify-between text-[11px] font-sans font-bold tracking-wide border-b border-white/5">
         <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
           <div className="flex items-center space-x-6">
-            <span className="flex items-center uppercase tracking-widest bg-teal-900/40 px-3 py-0.5 rounded-full border border-teal-800/50">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 mr-2 animate-pulse" />
+            <span className="flex items-center uppercase tracking-widest bg-white/10 text-gray-200 px-3 py-0.5 rounded-full border border-white/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mr-2" />
               Best Dermatologist in Ujjain
             </span>
-            <span className="px-3 border-l border-teal-800 flex items-center">
-              <Pin className="w-3 h-3 mr-2" />
+            <span className="px-3 border-l border-gray-700 flex items-center text-gray-300">
+              <Pin className="w-3 h-3 mr-2 text-amber-400" />
               {areaName} Clinic: {timingsText}
             </span>
           </div>
           <div className="flex items-center space-x-6 text-gray-300">
             <span className="flex items-center">
-               <MapPin className="w-3 h-3 mr-1.5 text-teal-400" />
+               <MapPin className="w-3 h-3 mr-1.5 text-amber-400" />
                UJJAIN, MP
             </span>
           </div>

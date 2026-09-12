@@ -158,7 +158,7 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
     <div className="bg-white select-text">
       
       {/* 1. Profile Header / Hero Section */}
-      <section className="relative overflow-hidden py-16 sm:py-24 bg-gradient-to-b from-surface via-white to-white">
+      <section className="relative overflow-hidden py-8 sm:py-16 bg-gradient-to-b from-surface via-white to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
@@ -222,7 +222,7 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
       </section>
 
       {/* 2. Biography & Clinical Philosophy */}
-      <section className="py-16 bg-gray-50 border-y border-gray-100">
+      <section className="py-8 sm:py-16 bg-gray-50 border-y border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto space-y-8">
             <div className="text-center">
@@ -264,9 +264,9 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
       </section>
 
       {/* 3. Specialized Treatments & Core Expertise */}
-      <section className="py-16 bg-white">
+      <section className="py-8 sm:py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="text-center max-w-3xl mx-auto mb-6 sm:mb-12">
             <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-4">
               <Stethoscope className="w-3.5 h-3.5 mr-1" />
               Specialization Details
@@ -309,9 +309,9 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
       </section>
 
       {/* 4. Education & Qualifications Timeline */}
-      <section className="py-16 bg-gray-50 border-t border-gray-100">
+      <section className="py-8 sm:py-16 bg-gray-50 border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="text-center max-w-3xl mx-auto mb-6 sm:mb-12">
             <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-4">
               <BookOpen className="w-3.5 h-3.5 mr-1" />
               Academic Milestones
@@ -345,9 +345,9 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
       </section>
 
       {/* 5. Certificates & Verification Section */}
-      <section className="py-16 bg-white border-t border-gray-100">
+      <section className="py-8 sm:py-16 bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-12">
+          <div className="text-center max-w-3xl mx-auto mb-6 sm:mb-10">
             <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-4">
               <Award className="w-3.5 h-3.5 mr-1" />
               Verified Board Certifications
@@ -360,20 +360,20 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
             </p>
           </div>
 
-          <div className="relative max-w-2xl mx-auto">
-            <div className="flex items-center justify-between space-x-2 sm:space-x-4">
+          <div className="relative max-w-2xl mx-auto px-2 sm:px-0">
+            <div className="relative flex items-center">
               {certificates.length > 1 && (
                 <button
                   type="button"
                   onClick={prevSlide}
-                  className="p-2 sm:p-3 rounded-full border border-gray-200 bg-white hover:bg-gray-50 transition-colors shadow-sm focus:outline-none hover:shadow-md shrink-0 active:scale-95 cursor-pointer"
+                  className="absolute -left-2 sm:-left-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3 rounded-full border border-gray-200 bg-white/90 backdrop-blur-sm hover:bg-white transition-all shadow-md hover:shadow-lg focus:outline-none shrink-0 active:scale-95 cursor-pointer"
                   aria-label="Previous certificate"
                 >
                   <ChevronLeft className="w-5 h-5 text-gray-700" />
                 </button>
               )}
 
-              <div className="flex-1 min-w-0 overflow-hidden py-2 px-1">
+              <div className="w-full overflow-hidden py-2 px-1">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={certIndex}
@@ -400,13 +400,13 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-playfair font-black text-lg text-gray-900 mb-1 group-hover:text-primary transition-colors truncate sm:whitespace-normal">
+                        <h3 className="font-playfair font-black text-base sm:text-lg text-gray-900 mb-1.5 group-hover:text-primary transition-colors whitespace-normal break-words leading-snug">
                           {currentCert.title}
                         </h3>
-                        <p className="font-sans text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
+                        <p className="font-sans text-xs sm:text-xs text-gray-600 font-bold uppercase tracking-wider leading-relaxed whitespace-normal break-words">
                           {currentCert.institution}
                         </p>
-                        <div className="mt-3 inline-flex items-center text-green-700 text-[10px] font-bold bg-green-50 px-2 py-1 rounded">
+                        <div className="mt-3 inline-flex items-center text-green-700 text-xs font-bold bg-green-50 px-2.5 py-1 rounded-md border border-green-200">
                           <CheckCircle className="w-3.5 h-3.5 mr-1" />
                           Verified Credentials
                         </div>
@@ -420,7 +420,7 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
                 <button
                   type="button"
                   onClick={nextSlide}
-                  className="p-2 sm:p-3 rounded-full border border-gray-200 bg-white hover:bg-gray-50 transition-colors shadow-sm focus:outline-none hover:shadow-md shrink-0 active:scale-95 cursor-pointer"
+                  className="absolute -right-2 sm:-right-6 top-1/2 -translate-y-1/2 z-20 p-2 sm:p-3 rounded-full border border-gray-200 bg-white/90 backdrop-blur-sm hover:bg-white transition-all shadow-md hover:shadow-lg focus:outline-none shrink-0 active:scale-95 cursor-pointer"
                   aria-label="Next certificate"
                 >
                   <ChevronRight className="w-5 h-5 text-gray-700" />
@@ -489,7 +489,7 @@ export default function DoctorProfileDetail({ cms }: DoctorProfileDetailProps) {
       </section>
 
       {/* 6. CTA / Booking Section */}
-      <section className="py-16 bg-gradient-to-t from-surface to-white border-t border-gray-100">
+      <section className="py-8 sm:py-16 bg-gradient-to-t from-surface to-white border-t border-gray-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="bg-primary text-white rounded-[32px] p-8 sm:p-12 shadow-xl relative overflow-hidden">
             {/* Background elements */}

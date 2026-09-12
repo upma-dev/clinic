@@ -1,9 +1,10 @@
 import { MongoClient, Db } from 'mongodb';
 import dns from 'dns';
 
-// Fix Node.js IPv6 first lookup issues on Windows / local networks
+// Fix Node.js IPv6 first lookup issues & DNS SRV resolution on Windows / local Wi-Fi networks
 try {
   dns.setDefaultResultOrder('ipv4first');
+  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
 } catch {
   // Ignore fallback if unsupported in environment
 }
@@ -12,8 +13,12 @@ const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB_NAME || 'skinhub';
 
 const options = {
-  serverSelectionTimeoutMS: 5000, // 5 seconds timeout to fail fast instead of hanging 30s
-  connectTimeoutMS: 5000,
+  serverSelectionTimeoutMS: 15000,
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  maxIdleTimeMS: 30000,
 };
 
 declare global {
@@ -75,5 +80,6 @@ export const COLLECTIONS = {
   progress_photos: 'progress_photos',
   cms: 'cms',
   notifications: 'notifications',
+  support_tickets: 'support_tickets',
 } as const;
 

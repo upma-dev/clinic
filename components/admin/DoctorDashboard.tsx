@@ -3,32 +3,64 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LogOut, PlusCircle, Trash2, BookOpen, Settings, Bell, Menu, X, Edit,
-  Eye, FileText, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, ShieldCheck, RefreshCw, Plus, Save,
+  Eye, FileText, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, PanelLeftClose, ShieldCheck, RefreshCw, Plus, Save, Loader2,
   Users, DollarSign, Calendar, Clock, Lock, Upload, Sparkles, HelpCircle,
-  Briefcase, Image as ImageIcon, AlertCircle, Search, Video, PhoneCall, Award, CalendarDays, UserX, UserCheck
+  Briefcase, Image as ImageIcon, AlertCircle, Search, Video, PhoneCall, Award, CalendarDays, UserX, UserCheck, LifeBuoy, MessageSquare, Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppointmentsList from './AppointmentsList';
 import QueueControls from './QueueControls';
 import DoctorBookingHistory from './DoctorBookingHistory';
 import DoctorTelemedicineView from '../doctor/DoctorTelemedicineView';
-import type { Booking, ClinicSettings, BlogPost, CMSContent, DbNotification, DailyQueue, QueueEntry } from '@/lib/types';
-import { formatPrice } from '@/lib/slots';
+import type { Booking, ClinicSettings, BlogPost, CMSContent, DbNotification, DailyQueue, QueueEntry, SupportTicket } from '@/lib/types';
+import { formatPrice, minutesToTime } from '@/lib/slots';
 
 interface DoctorDashboardProps {
   onLogout: () => void;
 }
 
-type DoctorTab = 'overview' | 'history' | 'queue' | 'prepaid' | 'settings' | 'booking-rules' | 'blogs' | 'cms' | 'telemedicine';
+type DoctorTab = 'overview' | 'history' | 'clinic-schedule' | 'online-schedule' | 'queue' | 'prepaid' | 'settings' | 'booking-rules' | 'blogs' | 'cms' | 'telemedicine' | 'support';
+
+const getInitialTab = (): DoctorTab => {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get('tab') as DoctorTab;
+    const validTabs: DoctorTab[] = ['overview', 'history', 'clinic-schedule', 'online-schedule', 'queue', 'prepaid', 'support', 'settings', 'booking-rules', 'blogs', 'cms', 'telemedicine'];
+    if (urlTab && validTabs.includes(urlTab)) {
+      return urlTab;
+    }
+    const savedTab = localStorage.getItem('doctor_active_tab') as DoctorTab;
+    if (savedTab && validTabs.includes(savedTab)) {
+      return savedTab;
+    }
+  }
+  return 'overview';
+};
+
+const getInitialRulesSubTab = (): 'slots' | 'schedule' | 'fees' | 'block' => {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const urlSubTab = params.get('subTab') as any;
+    const validSubTabs = ['slots', 'schedule', 'fees', 'block'];
+    if (urlSubTab && validSubTabs.includes(urlSubTab)) {
+      return urlSubTab;
+    }
+    const savedSubTab = localStorage.getItem('doctor_rules_subtab') as any;
+    if (savedSubTab && validSubTabs.includes(savedSubTab)) {
+      return savedSubTab;
+    }
+  }
+  return 'slots';
+};
 
 export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
-  const [tab, setTab] = useState<DoctorTab>('overview');
+  const [tab, setTab] = useState<DoctorTab>(getInitialTab);
   const [telemedicineStage, setTelemedicineStage] = useState<'confirmed' | 'pending' | 'completed' | 'all'>('confirmed');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    clinic: true,
-    content: true,
-    consult: true,
+    offline: true,
+    online: true,
+    content: false,
   });
 
   const toggleGroup = (key: string) => {
@@ -61,6 +93,50 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
     image: '',
   });
 
+  // CMS Category Sub-Tab State
+  const [cmsTab, setCmsTab] = useState<'hero' | 'about' | 'services' | 'before-after' | 'videos' | 'certificates' | 'faqs' | 'contact'>('hero');
+
+  // Before & After CRUD States
+  const [baFormMode, setBaFormMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeBaIdx, setActiveBaIdx] = useState<number | null>(null);
+  const [baForm, setBaForm] = useState({
+    treatment: '',
+    duration: '',
+    sessions: '',
+    tag: '',
+    beforeSrc: '',
+    afterSrc: '',
+  });
+
+  // Video CRUD States
+  const [videoFormMode, setVideoFormMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeVideoIdx, setActiveVideoIdx] = useState<number | null>(null);
+  const [videoForm, setVideoForm] = useState({
+    title: '',
+    desc: '',
+    duration: '',
+    videoUrl: '',
+    thumbnail: '',
+  });
+
+  // Testimonial CRUD States
+  const [testimonialFormMode, setTestimonialFormMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeTestimonialIdx, setActiveTestimonialIdx] = useState<number | null>(null);
+  const [testimonialForm, setTestimonialForm] = useState({
+    name: '',
+    role: '',
+    rating: 5,
+    text: '',
+  });
+
+  // FAQ CRUD States
+  const [faqFormMode, setFaqFormMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeFaqIdx, setActiveFaqIdx] = useState<number | null>(null);
+  const [faqForm, setFaqForm] = useState({
+    question: '',
+    answer: '',
+  });
+
   // Blog Management States
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [blogTotal, setBlogTotal] = useState(0);
@@ -89,10 +165,126 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   const [notifications, setNotifications] = useState<DbNotification[]>([]);
   const [notifTrayOpen, setNotifTrayOpen] = useState(false);
 
-  // Quick Action Toggles
+  // Support Tickets State
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<'all' | 'open' | 'in_progress' | 'resolved'>('all');
+  const [replyModalTicket, setReplyModalTicket] = useState<SupportTicket | null>(null);
+  const [replyText, setReplyText] = useState('');
+
+  // Category-wise Unread Notification Counts for Red Sidebar Badges
+  const unreadNotifs = notifications.filter(n => !n.read);
+
+  const unreadHistoryCount = unreadNotifs.filter(n => 
+    n.type === 'booking_new' || n.type === 'reschedule_request'
+  ).length;
+
+  const unreadTelemedicineCount = unreadNotifs.filter(n =>
+    (n.type === 'booking_new' || n.type === 'payment_received') &&
+    (n.message?.toLowerCase().includes('video') || n.message?.toLowerCase().includes('online'))
+  ).length;
+
+  const unreadPrepaidCount = unreadNotifs.filter(n => n.type === 'payment_received').length;
+
+  const unreadQueueCount = unreadNotifs.filter(n => n.type === 'patient_arrived' || n.type === 'queue_update').length;
+
+  const unreadSupportCount = unreadNotifs.filter(n => n.type === 'support_ticket').length;
+
+  const handleTabSelect = (selectedTab: DoctorTab) => {
+    setTab(selectedTab);
+    let typesToMark: string[] = [];
+    if (selectedTab === 'history' || selectedTab === 'clinic-schedule' || selectedTab === 'online-schedule') {
+      typesToMark = ['booking_new', 'reschedule_request'];
+    }
+    if (selectedTab === 'telemedicine') typesToMark = ['booking_new', 'payment_received'];
+    if (selectedTab === 'prepaid') typesToMark = ['payment_received'];
+    if (selectedTab === 'queue') typesToMark = ['patient_arrived', 'queue_update'];
+    if (selectedTab === 'support') typesToMark = ['support_ticket'];
+
+    if (typesToMark.length > 0) {
+      setNotifications(prev => prev.map(n => typesToMark.includes(n.type) ? { ...n, read: true } : n));
+      fetch('/api/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'mark_all_read' }) }).catch(console.error);
+    }
+  };
+
+  // Loading States
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [callingStaff, setCallingStaff] = useState(false);
+  const [rulesSubTab, setRulesSubTab] = useState<'slots' | 'schedule' | 'fees' | 'block'>(getInitialRulesSubTab);
+
+  // Sync active tab and subTab with URL & localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('doctor_active_tab', tab);
+      localStorage.setItem('doctor_rules_subtab', rulesSubTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      if (tab === 'booking-rules') {
+        url.searchParams.set('subTab', rulesSubTab);
+      } else {
+        url.searchParams.delete('subTab');
+      }
+      window.history.replaceState(null, '', url.pathname + url.search);
+    }
+  }, [tab, rulesSubTab]);
+
+  const [blockDateInput, setBlockDateInput] = useState('');
+  const [blockTimeInput, setBlockTimeInput] = useState('');
+  const [inspectorDate, setInspectorDate] = useState(new Date().toISOString().split('T')[0]);
+  const [hourFilter, setHourFilter] = useState<'all' | '11-12' | '12-1' | '1-2' | '2-3'>('all');
+  const [dateBookings, setDateBookings] = useState<Booking[]>([]);
+  const [fetchingDateBookings, setFetchingDateBookings] = useState(false);
+
+  const mainScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const preserveAllScroll = useCallback(async (action: () => Promise<void> | void) => {
+    const windowPos = window.scrollY || document.documentElement.scrollTop;
+    const containerPos = mainScrollRef.current?.scrollTop || 0;
+
+    await action();
+
+    const restore = () => {
+      if (mainScrollRef.current && containerPos) {
+        mainScrollRef.current.scrollTop = containerPos;
+      }
+      if (windowPos) {
+        window.scrollTo({ top: windowPos, behavior: 'instant' as any });
+      }
+    };
+
+    restore();
+    requestAnimationFrame(restore);
+    setTimeout(restore, 50);
+    setTimeout(restore, 150);
+  }, []);
+
+  useEffect(() => {
+    if (!inspectorDate) return;
+    preserveAllScroll(async () => {
+      setFetchingDateBookings(true);
+      try {
+        const [apptRes, settingsRes] = await Promise.all([
+          fetch(`/api/appointments?date=${inspectorDate}`),
+          fetch('/api/settings')
+        ]);
+        if (apptRes.ok) {
+          const data = await apptRes.json();
+          if (Array.isArray(data)) setDateBookings(data);
+        }
+        if (settingsRes.ok) {
+          const sData = await settingsRes.json();
+          setSettings(sData);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setFetchingDateBookings(false);
+      }
+    });
+  }, [inspectorDate, preserveAllScroll]);
+  const [showCustomBlockForm, setShowCustomBlockForm] = useState(false);
+  const [slotViewFormat, setSlotViewFormat] = useState<'cmd' | 'cards'>('cmd');
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
     title: string;
@@ -169,14 +361,15 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   // Load configs and data
   const refresh = useCallback(async () => {
     try {
-      const [apptRes, allApptRes, settingsRes, cmsRes, blogRes, notifRes, queueRes] = await Promise.all([
+      const [apptRes, allApptRes, settingsRes, cmsRes, blogRes, notifRes, queueRes, supportRes] = await Promise.all([
         fetch(`/api/appointments?date=${today}`),
         fetch('/api/appointments'),
         fetch('/api/settings'),
         fetch('/api/cms'),
         fetch(`/api/blogs?admin=true&search=${blogSearch}&category=${blogCategoryFilter}&page=${blogPage}&limit=10`),
         fetch('/api/notifications'),
-        fetch(`/api/queue?date=${today}`)
+        fetch(`/api/queue?date=${today}`),
+        fetch('/api/support')
       ]);
 
       if (allApptRes.ok) {
@@ -200,14 +393,16 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       }
       if (notifRes.ok) {
         const allNotifs: DbNotification[] = await notifRes.json();
-        const filteredNotifs = (allNotifs || []).filter(n => n.type === 'booking_new');
-        setNotifications(filteredNotifs);
-        handleNewNotifications(filteredNotifs);
+        setNotifications(allNotifs || []);
+        handleNewNotifications(allNotifs || []);
       }
       if (queueRes.ok) {
         const qData = await queueRes.json();
         setDaily(qData.daily);
         setEntries(qData.entries);
+      }
+      if (supportRes.ok) {
+        setSupportTickets(await supportRes.json());
       }
     } catch (e) {
       console.error(e);
@@ -240,11 +435,12 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
   const refreshData = useCallback(async () => {
     try {
-      const [apptRes, allApptRes, notifRes, queueRes] = await Promise.all([
+      const [apptRes, allApptRes, notifRes, queueRes, supportRes] = await Promise.all([
         fetch(`/api/appointments?date=${today}`),
         fetch('/api/appointments'),
         fetch('/api/notifications'),
-        fetch(`/api/queue?date=${today}`)
+        fetch(`/api/queue?date=${today}`),
+        fetch('/api/support')
       ]);
 
       if (allApptRes.ok) {
@@ -257,20 +453,23 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       }
       if (notifRes.ok) {
         const allNotifs: DbNotification[] = await notifRes.json();
-        const filteredNotifs = (allNotifs || []).filter(n => n.type === 'booking_new');
-        setNotifications(filteredNotifs);
-        handleNewNotifications(filteredNotifs);
+        setNotifications(allNotifs || []);
+        handleNewNotifications(allNotifs || []);
       }
       if (queueRes.ok) {
         const qData = await queueRes.json();
         setDaily(qData.daily);
         setEntries(qData.entries);
       }
+      if (supportRes.ok) {
+        setSupportTickets(await supportRes.json());
+      }
     } catch { }
   }, [today, handleNewNotifications]);
 
   useEffect(() => {
-    refresh();
+    setIsInitialLoading(true);
+    refresh().finally(() => setIsInitialLoading(false));
     // Poll appointments, queue status, and notifications every 8 seconds
     const interval = setInterval(() => {
       refreshData();
@@ -320,18 +519,40 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
   };
 
   // General POST setting updates
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isSavedSuccess, setIsSavedSuccess] = useState(false);
+
   const saveSettings = async (patch: Partial<ClinicSettings> & { blockSlot?: { date: string; time: string }; unblockSlot?: { date: string; time: string } }) => {
-    setLoading(true);
-    const res = await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
+    await preserveAllScroll(async () => {
+      setIsSavingSettings(true);
+      setIsSavedSuccess(false);
+      try {
+        const sanitizedPatch = { ...patch };
+        if ((sanitizedPatch as any).offlinePreBookingFee === '') (sanitizedPatch as any).offlinePreBookingFee = 0;
+        if ((sanitizedPatch as any).offlineConsultationFee === '') (sanitizedPatch as any).offlineConsultationFee = 0;
+        if ((sanitizedPatch as any).onlineConsultationFee === '') (sanitizedPatch as any).onlineConsultationFee = 0;
+        if ((sanitizedPatch as any).onlinePreBookingFee === '') (sanitizedPatch as any).onlinePreBookingFee = 0;
+
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sanitizedPatch),
+        });
+        if (res.ok) {
+          setIsSavedSuccess(true);
+          triggerToast('✅ SAVED! Clinic settings updated live');
+          setTimeout(() => setIsSavedSuccess(false), 15000);
+          await refreshData();
+        } else {
+          triggerToast('❌ Save settings failed');
+        }
+      } catch (err) {
+        console.error(err);
+        triggerToast('❌ Save error');
+      } finally {
+        setIsSavingSettings(false);
+      }
     });
-    if (res.ok) {
-      triggerToast('Settings successfully updated');
-      refresh();
-    }
-    setLoading(false);
   };
 
   // General CMS updates
@@ -440,6 +661,171 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
     await saveCms(newCms);
   };
 
+  // Before & After CRUD Handlers
+  const handleDeleteBeforeAfter = async (idx: number) => {
+    if (!cms) return;
+    if (confirm('Are you sure you want to delete this case?')) {
+      const updated = (cms.beforeAfterCases || []).filter((_, i) => i !== idx);
+      const newCms = { ...cms, beforeAfterCases: updated };
+      setCms(newCms);
+      await saveCms(newCms);
+    }
+  };
+
+  const handleSaveBeforeAfter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cms) return;
+    if (!baForm.treatment || !baForm.beforeSrc || !baForm.afterSrc) {
+      alert('Please fill in Treatment, Before Photo, and After Photo.');
+      return;
+    }
+
+    const updated = [...(cms.beforeAfterCases || [])];
+    const caseData = {
+      id: `ba-${Date.now()}`,
+      treatment: baForm.treatment,
+      duration: baForm.duration || '4 Weeks',
+      sessions: baForm.sessions || '3 Sessions',
+      tag: baForm.tag || 'Acne Care',
+      beforeSrc: baForm.beforeSrc,
+      afterSrc: baForm.afterSrc,
+    };
+
+    if (baFormMode === 'edit' && activeBaIdx !== null) {
+      const originalId = updated[activeBaIdx]?.id || caseData.id;
+      updated[activeBaIdx] = { ...caseData, id: originalId };
+    } else {
+      updated.push(caseData);
+    }
+
+    const newCms = { ...cms, beforeAfterCases: updated };
+    setCms(newCms);
+    setBaFormMode('list');
+    setActiveBaIdx(null);
+    await saveCms(newCms);
+  };
+
+  // Video CRUD Handlers
+  const handleDeleteVideo = async (idx: number) => {
+    if (!cms) return;
+    if (confirm('Are you sure you want to delete this video?')) {
+      const updated = (cms.videos || []).filter((_, i) => i !== idx);
+      const newCms = { ...cms, videos: updated };
+      setCms(newCms);
+      await saveCms(newCms);
+    }
+  };
+
+  const handleSaveVideo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cms) return;
+    if (!videoForm.title || !videoForm.videoUrl) {
+      alert('Please fill in Video Title and Video URL.');
+      return;
+    }
+
+    const updated = [...(cms.videos || [])];
+    const videoData = {
+      id: `v-${Date.now()}`,
+      title: videoForm.title,
+      desc: videoForm.desc,
+      duration: videoForm.duration || '3:45',
+      videoUrl: videoForm.videoUrl,
+      thumbnail: videoForm.thumbnail || 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800&q=80',
+    };
+
+    if (videoFormMode === 'edit' && activeVideoIdx !== null) {
+      const originalId = updated[activeVideoIdx]?.id || videoData.id;
+      updated[activeVideoIdx] = { ...videoData, id: originalId };
+    } else {
+      updated.push(videoData);
+    }
+
+    const newCms = { ...cms, videos: updated };
+    setCms(newCms);
+    setVideoFormMode('list');
+    setActiveVideoIdx(null);
+    await saveCms(newCms);
+  };
+
+  // Testimonial CRUD Handlers
+  const handleDeleteTestimonial = async (idx: number) => {
+    if (!cms) return;
+    if (confirm('Are you sure you want to delete this review?')) {
+      const updated = (cms.testimonials || []).filter((_, i) => i !== idx);
+      const newCms = { ...cms, testimonials: updated };
+      setCms(newCms);
+      await saveCms(newCms);
+    }
+  };
+
+  const handleSaveTestimonial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cms) return;
+    if (!testimonialForm.name || !testimonialForm.text) {
+      alert('Please fill in Patient Name and Review Text.');
+      return;
+    }
+
+    const updated = [...(cms.testimonials || [])];
+    const testData = {
+      name: testimonialForm.name,
+      role: testimonialForm.role || 'Patient',
+      rating: Number(testimonialForm.rating) || 5,
+      text: testimonialForm.text,
+    };
+
+    if (testimonialFormMode === 'edit' && activeTestimonialIdx !== null) {
+      updated[activeTestimonialIdx] = testData;
+    } else {
+      updated.push(testData);
+    }
+
+    const newCms = { ...cms, testimonials: updated };
+    setCms(newCms);
+    setTestimonialFormMode('list');
+    setActiveTestimonialIdx(null);
+    await saveCms(newCms);
+  };
+
+  // FAQ CRUD Handlers
+  const handleDeleteFaq = async (idx: number) => {
+    if (!cms) return;
+    if (confirm('Are you sure you want to delete this FAQ?')) {
+      const updated = (cms.faqs || []).filter((_, i) => i !== idx);
+      const newCms = { ...cms, faqs: updated };
+      setCms(newCms);
+      await saveCms(newCms);
+    }
+  };
+
+  const handleSaveFaq = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cms) return;
+    if (!faqForm.question || !faqForm.answer) {
+      alert('Please fill in Question and Answer.');
+      return;
+    }
+
+    const updated = [...(cms.faqs || [])];
+    const faqData = {
+      question: faqForm.question,
+      answer: faqForm.answer,
+    };
+
+    if (faqFormMode === 'edit' && activeFaqIdx !== null) {
+      updated[activeFaqIdx] = faqData;
+    } else {
+      updated.push(faqData);
+    }
+
+    const newCms = { ...cms, faqs: updated };
+    setCms(newCms);
+    setFaqFormMode('list');
+    setActiveFaqIdx(null);
+    await saveCms(newCms);
+  };
+
   // Image Upload handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
@@ -448,16 +834,40 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
     formData.append('file', file);
 
     triggerToast('Uploading image...');
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
-    if (res.ok) {
-      const data = await res.json();
-      callback(data.imageUrl);
-      triggerToast('Image uploaded successfully');
-    } else {
-      triggerToast('Failed to upload image');
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const url = data.imageUrl || (data.urls && data.urls[0]);
+        if (url) {
+          callback(url);
+          triggerToast('Image uploaded successfully');
+          return;
+        }
+      }
+      
+      // Fallback to FileReader base64
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          callback(reader.result);
+          triggerToast('Image uploaded successfully');
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Upload fetch failed, using base64 fallback:', err);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          callback(reader.result);
+          triggerToast('Image uploaded successfully');
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -638,8 +1048,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
 
   const pendingPaymentsCount = todayBookings.filter(b => b.paymentStatus !== 'paid' && b.status !== 'completed').length;
 
-  // Notification states
-  const unreadNotifs = notifications.filter(n => !n.read);
+
 
   // SVG Chart data points helper
   const renderMiniChart = () => {
@@ -686,6 +1095,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
     { id: 'history' as const, label: 'Date-wise Records', icon: <CalendarDays className="w-4 h-4" /> },
     { id: 'queue' as const, label: 'Queue Controls', icon: <Clock className="w-4 h-4" /> },
     { id: 'prepaid' as const, label: 'Pre-Paid', icon: <DollarSign className="w-4 h-4" /> },
+    { id: 'support' as const, label: 'Support Tickets', icon: <LifeBuoy className="w-4 h-4" /> },
     { id: 'settings' as const, label: 'Clinic Profile', icon: <Settings className="w-4 h-4" /> },
     { id: 'booking-rules' as const, label: 'Booking Rules', icon: <Clock className="w-4 h-4" /> },
     { id: 'blogs' as const, label: 'Blog Manager', icon: <BookOpen className="w-4 h-4" /> },
@@ -693,24 +1103,29 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
     { id: 'telemedicine' as const, label: 'Online Consultations', icon: <Video className="w-4 h-4" /> },
   ];
 
-  if (loading && allBookings.length === 0) {
+  if (isInitialLoading) {
     return (
-      <div className="min-h-screen bg-[#F4F6F8] p-4 lg:p-8 space-y-6 animate-pulse select-none font-sans">
-        <div className="max-w-7xl mx-auto space-y-8">
-          <div className="flex justify-between items-center pb-4 border-b border-gray-200">
-            <div className="space-y-2">
-              <div className="h-8 w-60 bg-gray-200 rounded-xl"></div>
-              <div className="h-4 w-80 bg-gray-200 rounded-lg"></div>
+      <div className="h-screen w-full bg-[#F4F6F8] font-sans flex items-center justify-center p-6 select-none">
+        <div className="max-w-md w-full bg-white border border-gray-200 rounded-3xl p-8 shadow-xl text-center space-y-6 animate-fade-in">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto relative shadow-inner">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-playfair text-xl font-black text-gray-900 leading-tight">
+              Loading Admin Console...
+            </h2>
+            <p className="text-xs text-gray-500 font-semibold">
+              Fetching active patient appointments, OPD scheduler rules, and clinic configurations.
+            </p>
+          </div>
+          <div className="space-y-3 pt-2">
+            <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-primary to-accent rounded-full animate-pulse w-3/4"></div>
             </div>
-            <div className="h-10 w-10 bg-gray-200 rounded-xl"></div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">
+              Please wait a moment
+            </span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="h-24 bg-gray-200 rounded-2xl"></div>
-            <div className="h-24 bg-gray-200 rounded-2xl"></div>
-            <div className="h-24 bg-gray-200 rounded-2xl"></div>
-            <div className="h-24 bg-gray-200 rounded-2xl"></div>
-          </div>
-          <div className="h-96 bg-gray-200 rounded-3xl"></div>
         </div>
       </div>
     );
@@ -743,8 +1158,14 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
           {/* 1. Sidebar Top Header (Branding + Collapse button) */}
           <div className="p-4 border-b border-[#1B2D3D] flex items-center justify-between bg-[#0B1B29] shrink-0">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-serif font-black text-xl shadow-lg shrink-0">
-                {settings?.clinicName?.charAt(0) || 'S'}
+              <div className="w-10 h-10 rounded-xl bg-white border border-white/20 p-1 flex items-center justify-center shadow-lg shrink-0 overflow-hidden">
+                {settings?.clinicLogo ? (
+                  <img src={settings.clinicLogo} alt={settings?.clinicName || 'Clinic Logo'} className="w-full h-full object-contain" />
+                ) : (
+                  <span className="font-serif font-black text-xl text-[#0B1B29]">
+                    {settings?.clinicName?.charAt(0) || 'S'}
+                  </span>
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -767,15 +1188,15 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
             </button>
           </div>
 
-          {/* 2. Mode Switcher Pill Control (Image 1 style) */}
+          {/* 2. Mode Switcher Pill Control */}
           <div className="p-3 border-b border-[#1B2D3D] bg-[#07131E] shrink-0">
             <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-1.5 px-1">
-              Admin Console Mode
+              ADMIN CONSOLE MODE
             </div>
             <div className="bg-[#112334] p-1 rounded-xl flex items-center gap-1 border border-white/5">
               <button
-                onClick={() => setTab('overview')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${tab !== 'telemedicine'
+                onClick={() => handleTabSelect('overview')}
+                className={`flex-1 py-2 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${tab !== 'cms'
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
                   : 'text-gray-400 hover:text-white'
                   }`}
@@ -784,14 +1205,14 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                 <span>Console</span>
               </button>
               <button
-                onClick={() => setTab('telemedicine')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${tab === 'telemedicine'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                onClick={() => handleTabSelect('cms')}
+                className={`flex-1 py-2 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${tab === 'cms'
+                  ? 'bg-emerald-500 text-white shadow-md font-black'
                   : 'text-gray-400 hover:text-white'
                   }`}
               >
-                <Video className="w-3.5 h-3.5" />
-                <span>Consults</span>
+                <Settings className="w-3.5 h-3.5" />
+                <span>Global Settings</span>
               </button>
             </div>
           </div>
@@ -820,53 +1241,216 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               </button>
             </div>
 
-            {/* Category: CLINIC MANAGEMENT */}
+            {/* Category: OPD & RECEPTION */}
             <div>
               <div className="flex items-center gap-2 px-2 py-1 mb-1">
-                <div className="w-1 h-3.5 bg-teal-400 rounded-full" />
+                <div className="w-1 h-3.5 bg-emerald-400 rounded-full" />
                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
-                  CLINIC MANAGEMENT
+                  OPD & RECEPTION
                 </span>
               </div>
 
+              {/* Submenu 1: Offline / Clinic Patients */}
               <div className="mt-1 space-y-1">
                 <button
-                  onClick={() => toggleGroup('clinic')}
+                  onClick={() => toggleGroup('offline')}
                   className="w-full px-3 py-2 rounded-xl flex items-center justify-between text-xs font-bold text-gray-300 hover:bg-white/5 transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
-                    <Clock className="w-4 h-4 text-teal-400" />
-                    <span>Clinic Operations</span>
+                    <Clock className="w-4 h-4 text-emerald-400" />
+                    <span>Offline / Clinic Patients</span>
                   </div>
-                  <ChevronDown
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedGroups.clinic ? 'rotate-180' : ''
+                  <div className="flex items-center gap-1.5">
+                    {(unreadQueueCount + unreadPrepaidCount) > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                        {unreadQueueCount + unreadPrepaidCount}
+                      </span>
+                    )}
+                    <ChevronDown
+                      className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                        expandedGroups.offline ? 'rotate-180' : ''
                       }`}
-                  />
+                    />
+                  </div>
                 </button>
 
-                {expandedGroups.clinic && (
-                  <div className="pl-4 space-y-1 border-l-2 border-teal-500/30 ml-3.5">
-                    {[
-                      { id: 'history' as const, label: 'Date-wise Records', icon: <CalendarDays className="w-3.5 h-3.5" /> },
-                      { id: 'queue' as const, label: 'Queue Controls', icon: <Clock className="w-3.5 h-3.5" /> },
-                      { id: 'prepaid' as const, label: 'Pre-Paid Log', icon: <DollarSign className="w-3.5 h-3.5" /> },
-                      { id: 'settings' as const, label: 'Clinic Profile', icon: <Settings className="w-3.5 h-3.5" /> },
-                      { id: 'booking-rules' as const, label: 'Booking Rules', icon: <Clock className="w-3.5 h-3.5" /> },
-                    ].map((sub) => (
-                      <button
-                        key={sub.id}
-                        onClick={() => setTab(sub.id)}
-                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${tab === sub.id
+                {expandedGroups.offline && (
+                  <div className="pl-4 space-y-1 border-l-2 border-emerald-500/40 ml-3.5">
+                    <button
+                      onClick={() => handleTabSelect('queue')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'queue'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : unreadQueueCount > 0
+                          ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 font-bold'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'queue' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                        Live Queue
+                      </span>
+                      {unreadQueueCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                          {unreadQueueCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleTabSelect('clinic-schedule')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'clinic-schedule' || tab === 'history'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : unreadHistoryCount > 0
+                          ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 font-bold'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'clinic-schedule' || tab === 'history' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                        Today's Schedule & Records
+                      </span>
+                      {unreadHistoryCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                          {unreadHistoryCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleTabSelect('booking-rules')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'booking-rules'
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                           : 'text-gray-400 hover:text-white hover:bg-white/5'
-                          }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className={tab === sub.id ? 'text-emerald-400' : 'text-gray-500'}>•</span>
-                          {sub.label}
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'booking-rules' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                        Slot Blocker & Rules
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => handleTabSelect('prepaid')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'prepaid'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : unreadPrepaidCount > 0
+                          ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 font-bold'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'prepaid' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                        Pre-Paid Log
+                      </span>
+                      {unreadPrepaidCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                          {unreadPrepaidCount}
                         </span>
-                      </button>
-                    ))}
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleTabSelect('settings')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'settings'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'settings' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
+                        Clinic Profile
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Submenu 2: Online Patients */}
+              <div className="mt-2 space-y-1">
+                <button
+                  onClick={() => toggleGroup('online')}
+                  className="w-full px-3 py-2 rounded-xl flex items-center justify-between text-xs font-bold text-gray-300 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Video className="w-4 h-4 text-sky-400" />
+                    <span>Online Patients</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {(unreadTelemedicineCount + unreadSupportCount) > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                        {unreadTelemedicineCount + unreadSupportCount}
+                      </span>
+                    )}
+                    <ChevronDown
+                      className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                        expandedGroups.online ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </div>
+                </button>
+
+                {expandedGroups.online && (
+                  <div className="pl-4 space-y-1 border-l-2 border-sky-500/40 ml-3.5">
+                    <button
+                      onClick={() => handleTabSelect('telemedicine')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'telemedicine'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : unreadTelemedicineCount > 0
+                          ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 font-bold'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'telemedicine' ? 'text-sky-400' : 'text-gray-500'}>•</span>
+                        Online Video Consultations
+                      </span>
+                      {unreadTelemedicineCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                          {unreadTelemedicineCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleTabSelect('online-schedule')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'online-schedule'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'online-schedule' ? 'text-sky-400' : 'text-gray-500'}>•</span>
+                        Consultation Records
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => handleTabSelect('support')}
+                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                        tab === 'support'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : unreadSupportCount > 0
+                          ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30 font-bold'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={tab === 'support' ? 'text-sky-400' : 'text-gray-500'}>•</span>
+                        Support Tickets
+                      </span>
+                      {unreadSupportCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                          {unreadSupportCount}
+                        </span>
+                      )}
+                    </button>
                   </div>
                 )}
               </div>
@@ -877,7 +1461,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               <div className="flex items-center gap-2 px-2 py-1 mb-1">
                 <div className="w-1 h-3.5 bg-sky-400 rounded-full" />
                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
-                  CONTENT MANAGEMENT
+                  EDITORIAL & HOMEPAGE
                 </span>
               </div>
 
@@ -891,8 +1475,9 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     <span>Editorial & Homepage</span>
                   </div>
                   <ChevronDown
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedGroups.content ? 'rotate-180' : ''
-                      }`}
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                      expandedGroups.content ? 'rotate-180' : ''
+                    }`}
                   />
                 </button>
 
@@ -904,11 +1489,12 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     ].map((sub) => (
                       <button
                         key={sub.id}
-                        onClick={() => setTab(sub.id)}
-                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${tab === sub.id
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
-                          }`}
+                        onClick={() => handleTabSelect(sub.id)}
+                        className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                          tab === sub.id
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
                       >
                         <span className="flex items-center gap-2">
                           <span className={tab === sub.id ? 'text-emerald-400' : 'text-gray-500'}>•</span>
@@ -916,71 +1502,6 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                         </span>
                       </button>
                     ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Category: CONSULTATIONS */}
-            <div>
-              <div className="flex items-center gap-2 px-2 py-1 mb-1">
-                <div className="w-1 h-3.5 bg-indigo-400 rounded-full" />
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
-                  CONSULTATIONS
-                </span>
-              </div>
-
-              <div className="mt-1 space-y-1">
-                <button
-                  onClick={() => toggleGroup('consult')}
-                  className="w-full px-3 py-2 rounded-xl flex items-center justify-between text-xs font-bold text-gray-300 hover:bg-white/5 transition-colors"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Video className="w-4 h-4 text-indigo-400" />
-                    <span>Online Video Consults</span>
-                  </div>
-                  <ChevronDown
-                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedGroups.consult ? 'rotate-180' : ''
-                      }`}
-                  />
-                </button>
-
-                {expandedGroups.consult && (
-                  <div className="pl-4 space-y-1 border-l-2 border-indigo-500/30 ml-3.5">
-                    <button
-                      onClick={() => setTab('telemedicine')}
-                      className={`w-full px-3 py-2 rounded-lg text-left text-xs font-semibold transition-all ${tab === 'telemedicine'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                        }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className={tab === 'telemedicine' ? 'text-emerald-400' : 'text-gray-500'}>•</span>
-                        Video Portal
-                      </span>
-                    </button>
-
-                    {tab === 'telemedicine' && (
-                      <div className="pl-3 space-y-1 pt-1">
-                        {[
-                          { stage: 'confirmed' as const, label: '📅 Confirmed' },
-                          { stage: 'pending' as const, label: '⏳ Pending Review' },
-                          { stage: 'completed' as const, label: '✅ Completed' },
-                          { stage: 'all' as const, label: '📋 All Consultations' },
-                        ].map((sub) => (
-                          <button
-                            key={sub.stage}
-                            onClick={() => setTelemedicineStage(sub.stage)}
-                            className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-all ${telemedicineStage === sub.stage
-                              ? 'bg-emerald-400/20 text-emerald-300'
-                              : 'text-gray-400 hover:text-white hover:bg-white/5'
-                              }`}
-                          >
-                            {sub.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -1071,8 +1592,12 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               <div className="space-y-6">
                 <div className="flex justify-between items-center pb-4 border-b border-[#1B2D3D]">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white text-lg">
-                      {settings?.clinicName?.charAt(0) || 'S'}
+                    <div className="w-8 h-8 rounded-lg bg-white border border-white/20 p-0.5 flex items-center justify-center text-gray-900 font-bold text-base shadow-sm overflow-hidden shrink-0">
+                      {settings?.clinicLogo ? (
+                        <img src={settings.clinicLogo} alt="Logo" className="w-full h-full object-contain" />
+                      ) : (
+                        <span>{settings?.clinicName?.charAt(0) || 'S'}</span>
+                      )}
                     </div>
                     <span className="font-playfair text-sm font-bold">{settings?.clinicName || 'Skin Hub'}</span>
                   </div>
@@ -1081,22 +1606,38 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                   </button>
                 </div>
                 <nav className="space-y-2">
-                  {navItems.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setTab(item.id);
-                        setSidebarOpen(false);
-                      }}
-                      className={`w-full px-4 py-3 rounded-xl flex items-center gap-3 font-sans text-xs font-bold uppercase tracking-wider transition-all outline-none ${tab === item.id
-                        ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                        }`}
-                    >
-                      {item.icon}
-                      {item.label}
-                    </button>
-                  ))}
+                  {navItems.map((item) => {
+                    let count = 0;
+                    if (item.id === 'history') count = unreadHistoryCount;
+                    if (item.id === 'queue') count = unreadQueueCount;
+                    if (item.id === 'prepaid') count = unreadPrepaidCount;
+                    if (item.id === 'support') count = unreadSupportCount;
+                    if (item.id === 'telemedicine') count = unreadTelemedicineCount;
+
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          handleTabSelect(item.id);
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 rounded-xl flex items-center justify-between font-sans text-xs font-bold uppercase tracking-wider transition-all outline-none ${tab === item.id
+                          ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                          }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </div>
+                        {count > 0 && (
+                          <span className="w-5 h-5 rounded-full bg-[#E51C44] border border-rose-400 text-white text-[11px] font-black flex items-center justify-center shadow-md animate-pulse shrink-0">
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </nav>
               </div>
 
@@ -1107,7 +1648,7 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
       </AnimatePresence>
 
       {/* Main Workspace Right Container with Independent Vertical Scroll */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto bg-[#F4F6F8]">
+      <div ref={mainScrollRef} className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto bg-[#F4F6F8]">
         <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
 
           {/* Top Header Row for Desktop */}
@@ -1125,7 +1666,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               <div>
                 <h1 className="font-playfair text-2.5xl font-black text-gray-900 leading-tight">
                   {tab === 'overview' && 'Administrative Console'}
-                  {tab === 'history' && 'Date-wise Booking Records & Clinical History'}
+                  {(tab === 'history' || tab === 'clinic-schedule') && 'Offline Clinic OPD Patients List'}
+                  {tab === 'online-schedule' && 'Online Video Consultation Patients List'}
                   {tab === 'queue' && 'Queue Management Board'}
                   {tab === 'prepaid' && 'Online Pre-paid Log'}
                   {tab === 'settings' && 'Clinic Configuration'}
@@ -1288,14 +1830,13 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                 </div>
               )}
 
-              {/* PAST HISTORY & DATE-WISE RECORDS TAB */}
-              {tab === 'history' && (
+              {/* OFFLINE CLINIC PATIENTS SCHEDULE & RECORDS TAB (IMAGE 1 LIST FORMAT) */}
+              {(tab === 'history' || tab === 'clinic-schedule') && (
                 <div className="w-full space-y-6">
-                  <DoctorBookingHistory
+                  <AppointmentsList
                     bookings={allBookings}
-                    settings={settings}
-                    onRefresh={refresh}
-                    onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason) => {
+                    loading={false}
+                    onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason, paymentMethod) => {
                       const res = await fetch('/api/appointments/update', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1305,7 +1846,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                           nextScheduleDate,
                           newDate: rescheduleDate,
                           newTime: rescheduleTime,
-                          reason: rescheduleReason
+                          reason: rescheduleReason,
+                          paymentMethod
                         }),
                       });
                       if (res.ok) {
@@ -1318,6 +1860,46 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                         alert(data.error || 'Action failed.');
                       }
                     }}
+                    onRefresh={refresh}
+                    role="doctor"
+                    initialFilter="offline"
+                  />
+                </div>
+              )}
+
+              {/* ONLINE TELE-CONSULTATION PATIENTS RECORDS TAB (IMAGE 1 LIST FORMAT) */}
+              {tab === 'online-schedule' && (
+                <div className="w-full space-y-6">
+                  <AppointmentsList
+                    bookings={allBookings}
+                    loading={false}
+                    onAction={async (id, action, nextScheduleDate, rescheduleDate, rescheduleTime, rescheduleReason, paymentMethod) => {
+                      const res = await fetch('/api/appointments/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          id,
+                          action,
+                          nextScheduleDate,
+                          newDate: rescheduleDate,
+                          newTime: rescheduleTime,
+                          reason: rescheduleReason,
+                          paymentMethod
+                        }),
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        triggerToast(`Action "${action}" completed`);
+                        refresh();
+                        return data;
+                      } else {
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.error || 'Action failed.');
+                      }
+                    }}
+                    onRefresh={refresh}
+                    role="doctor"
+                    initialFilter="online"
                   />
                 </div>
               )}
@@ -1408,7 +1990,13 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                     )}
                   </div>
 
-                  {settings && (
+                  {!settings ? (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center space-y-3 shadow-2xs animate-pulse">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                      <p className="text-xs font-bold text-gray-700">Loading clinic profile details...</p>
+                      <p className="text-[10px] text-gray-400 font-medium">Fetching settings from clinic server...</p>
+                    </div>
+                  ) : (
                     <form onSubmit={(e) => { e.preventDefault(); }} className="space-y-6">
 
                       {/* Card 1: Basic Clinic Identity */}
@@ -1581,99 +2169,609 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
               {/* BOOKING SCHEDULER RULES */}
               {tab === 'booking-rules' && (
                 <div className="space-y-6">
-                  {/* Simple Booking Rules & Settings Header */}
+                  {/* Header */}
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
                     <div>
                       <h2 className="font-playfair text-2xl font-black text-gray-900 flex items-center gap-2">
-                        <Clock className="w-6 h-6 text-primary" /> Booking Rules & Clinic Timings
+                        <Clock className="w-6 h-6 text-primary" /> Booking Rules & Operations
                       </h2>
                       <p className="text-xs text-gray-500 font-semibold mt-1">
-                        Configure clinic opening hours, consultation time per patient, daily limits, and working days.
+                        Easily manage consultation durations, OPD timings, hourly buffer slots, pricing, and blocked dates.
                       </p>
                     </div>
                     {settings && (
                       <button
                         type="button"
-                        disabled={loading}
+                        disabled={loading || isSavingSettings}
                         onClick={() => saveSettings(settings)}
-                        className="px-6 py-3 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-md transition-all outline-none cursor-pointer shrink-0"
+                        className={`px-6 py-3 font-extrabold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-md transition-all outline-none cursor-pointer shrink-0 ${
+                          isSavedSuccess
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-emerald-300 shadow-lg scale-105'
+                            : isSavingSettings
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white'
+                        }`}
                       >
-                        <Save className="w-4 h-4 text-emerald-300" />
-                        Save Booking Rules
+                        {isSavingSettings ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-white" />
+                            <span>Saving Settings...</span>
+                          </>
+                        ) : isSavedSuccess ? (
+                          <>
+                            <CheckCircle className="w-4.5 h-4.5 text-white animate-bounce" />
+                            <span>✓ SETTINGS SAVED!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 text-emerald-300" />
+                            <span>Save All Settings</span>
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
 
-                  {settings && (
+                  {/* Sub-Navigation Tabs */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setRulesSubTab('slots')}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                        rulesSubTab === 'slots'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <Clock className="w-4 h-4" />
+                      <span>⏰ Slot Duration & Hourly Buffer</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRulesSubTab('schedule')}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                        rulesSubTab === 'schedule'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <CalendarDays className="w-4 h-4" />
+                      <span>📅 OPD Hours & Days</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRulesSubTab('fees')}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                        rulesSubTab === 'fees'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <DollarSign className="w-4 h-4" />
+                      <span>💰 Fees & Payment Rules</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRulesSubTab('block')}
+                      className={`px-4 py-2.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                        rulesSubTab === 'block'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <Calendar className="w-4 h-4" />
+                      <span>🚫 Date & Time Slot Blocker</span>
+                    </button>
+                  </div>
+
+                  {!settings ? (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center space-y-3 shadow-2xs animate-pulse">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                      <p className="text-xs font-bold text-gray-700">Loading consultation rules & slot configurations...</p>
+                      <p className="text-[10px] text-gray-400 font-medium">Fetching settings from clinic server...</p>
+                    </div>
+                  ) : (
                     <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
 
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* SUB-TAB 1: Slot Duration & Hourly Buffer */}
+                      {rulesSubTab === 'slots' && (
+                        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-6">
+                          <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                                <Clock className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Consultation Time & Buffer Rules</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Set patient consultation duration and automatic hourly buffer slots</p>
+                              </div>
+                            </div>
 
-                        {/* Clinic Timings & Limits Card */}
-                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
-                          <div className="flex items-center gap-3 border-b pb-3">
-                            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                              <Clock className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Timings & Patient Limits</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Set daily patient capacity and consultation time</p>
-                            </div>
+                            <button
+                              type="button"
+                              disabled={loading || isSavingSettings}
+                              onClick={() => saveSettings(settings)}
+                              className={`px-5 py-2.5 font-black text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center gap-2 shrink-0 ${
+                                isSavedSuccess
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-emerald-300 scale-105'
+                                  : isSavingSettings
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-primary hover:bg-primary/90 text-white'
+                              }`}
+                            >
+                              {isSavingSettings ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                                  <span>Saving...</span>
+                                </>
+                              ) : isSavedSuccess ? (
+                                <>
+                                  <CheckCircle className="w-4 h-4 text-white animate-bounce" />
+                                  <span>✓ SETTINGS SAVED!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="w-4 h-4 text-emerald-300" />
+                                  <span>Save Settings</span>
+                                </>
+                              )}
+                            </button>
                           </div>
 
-                          {/* Consultation Time Per Patient */}
-                          <div className="space-y-2">
-                            <label className="text-xs font-bold text-gray-800 block">
-                              Consultation Time Per Patient
-                            </label>
-                            <div className="grid grid-cols-4 gap-2">
-                              {[15, 20, 30, 45].map((mins) => (
+                          {isSavedSuccess && (
+                            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-2 text-emerald-900 text-xs font-bold animate-fade-in shadow-2xs">
+                              <CheckCircle className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+                              <span>✓ Settings have been successfully saved and applied live to the booking system!</span>
+                            </div>
+                          )}
+
+                          {/* Custom Consultation Time */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-gray-800">
+                                Consultation Time Per Patient (Minutes)
+                              </label>
+                              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+                                ⚡ {settings.slotDurationMinutes || 3} Mins ({Math.floor(60 / (settings.slotDurationMinutes || 3))} slots/hour)
+                              </span>
+                            </div>
+
+                            {/* Preset Pills */}
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                              {[3, 4, 5, 10, 15, 20, 30].map((mins) => (
                                 <button
                                   type="button"
                                   key={mins}
-                                  onClick={() => setSettings({ ...settings, onlineSlotDuration: mins, slotDurationMinutes: mins })}
-                                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${settings.onlineSlotDuration === mins
-                                    ? 'bg-primary text-white border-primary shadow-xs'
-                                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                                    }`}
+                                  onClick={() => {
+                                    const updated = { ...settings, onlineSlotDuration: mins, slotDurationMinutes: mins };
+                                    setSettings(updated);
+                                    saveSettings({ onlineSlotDuration: mins, slotDurationMinutes: mins });
+                                  }}
+                                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                    (settings.slotDurationMinutes || 3) === mins
+                                      ? 'bg-primary text-white border-primary shadow-xs'
+                                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                  }`}
                                 >
                                   {mins} Mins
                                 </button>
                               ))}
                             </div>
+
+                            {/* Custom Input */}
+                            <div className="flex items-center gap-2 pt-1">
+                              <span className="text-xs font-bold text-gray-600">Custom Duration:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={120}
+                                value={settings.slotDurationMinutes || 3}
+                                onChange={(e) => {
+                                  const val = Math.max(1, Number(e.target.value));
+                                  const updated = { ...settings, slotDurationMinutes: val, onlineSlotDuration: val };
+                                  setSettings(updated);
+                                  saveSettings({ slotDurationMinutes: val, onlineSlotDuration: val });
+                                }}
+                                className="w-28 px-3 py-1.5 border rounded-xl text-xs font-bold text-gray-900 bg-white focus:border-primary outline-none"
+                                placeholder="Custom Mins"
+                              />
+                              <span className="text-xs font-medium text-gray-500">Minutes</span>
+                            </div>
                           </div>
 
+                          {/* Live Slot Inspector - Clean Light Table List (Exact Image 2 Style) */}
+                          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-6">
+                            {/* Top Title & Header */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+                              <div>
+                                <h3 className="font-playfair font-black text-xl text-gray-900 flex items-center gap-2">
+                                  📋 OPD Slot Schedule & Rules
+                                </h3>
+                                <p className="text-xs text-gray-500 font-semibold mt-0.5">
+                                  Triage consultation slots, update reserved buffer status, and inspect daily 4-min slot list.
+                                </p>
+                              </div>
 
-                          {/* Advance notice needed */}
-                          <div className="flex flex-col pt-2 border-t border-gray-150">
-                            <label className="text-xs font-bold text-gray-800 mb-1.5">Advance Notice Required</label>
-                            <select
-                              value={settings.bookingBufferHours}
-                              onChange={(e) => setSettings({ ...settings, bookingBufferHours: Number(e.target.value) })}
-                              className="px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
-                            >
-                              <option value={0}>Same Time Allowed</option>
-                              <option value={1}>1 Hour Advance</option>
-                              <option value={2}>2 Hours Advance</option>
-                              <option value={6}>6 Hours Advance</option>
-                              <option value={12}>12 Hours Advance</option>
-                              <option value={24}>24 Hours Advance</option>
-                            </select>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                                  Select Date:
+                                  {fetchingDateBookings && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                                </span>
+                                <input
+                                  type="date"
+                                  value={inspectorDate}
+                                  onChange={(e) => setInspectorDate(e.target.value)}
+                                  className="px-3 py-1.5 border border-gray-300 rounded-xl text-xs font-bold text-gray-900 bg-white outline-none focus:border-primary cursor-pointer shadow-2xs"
+                                />
+                                <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSlotViewFormat('cmd')}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      slotViewFormat === 'cmd'
+                                        ? 'bg-white text-gray-900 shadow-2xs border border-gray-200'
+                                        : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                                  >
+                                    📋 Table List
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSlotViewFormat('cards')}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      slotViewFormat === 'cards'
+                                        ? 'bg-white text-gray-900 shadow-2xs border border-gray-200'
+                                        : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                                  >
+                                    📊 Cards
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Filter Pills Bar (Exact Image 2 Yellow/White Pill style) */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {[
+                                { id: 'all', label: '⚡ ALL SLOTS (11 AM - 3 PM)' },
+                                { id: '11-12', label: '11:00 AM - 12:00 PM' },
+                                { id: '12-1', label: '12:00 PM - 01:00 PM' },
+                                { id: '1-2', label: '01:00 PM - 02:00 PM' },
+                                { id: '2-3', label: '02:00 PM - 03:00 PM' },
+                              ].map((f) => (
+                                <button
+                                  type="button"
+                                  key={f.id}
+                                  onClick={() => setHourFilter(f.id as any)}
+                                  className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all border cursor-pointer ${
+                                    hourFilter === f.id
+                                      ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {f.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Table List View (Exact Image 2 Table Format) */}
+                            {slotViewFormat === 'cmd' ? (
+                              <div className="overflow-hidden border border-gray-200 rounded-2xl shadow-2xs">
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left border-collapse min-w-[700px]">
+                                    <thead>
+                                      <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold uppercase tracking-wider text-[10px]">
+                                        <th className="py-3 px-4 w-12 text-center">S.NO</th>
+                                        <th className="py-3 px-4"># SLOT TIME</th>
+                                        <th className="py-3 px-4">OPD SESSION</th>
+                                        <th className="py-3 px-4">SLOT TYPE</th>
+                                        <th className="py-3 px-4">PAYMENT / TYPE</th>
+                                        <th className="py-3 px-4 text-center">STATUS</th>
+                                        <th className="py-3 px-4 text-right">ACTIONS</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-150 bg-white">
+                                      {(() => {
+                                        const duration = settings.slotDurationMinutes || 3;
+                                        const bufferCount = settings.hourlyBufferCount ?? 3;
+                                        const isBufferEnabled = settings.autoReserveHourlyBufferSlots ?? true;
+
+                                        const hourBlocks = [
+                                          { id: '11-12', label: '11:00 AM - 12:00 PM', startMin: 660 },
+                                          { id: '12-1', label: '12:00 PM - 01:00 PM', startMin: 720 },
+                                          { id: '1-2', label: '01:00 PM - 02:00 PM', startMin: 780 },
+                                          { id: '2-3', label: '02:00 PM - 03:00 PM', startMin: 840 },
+                                        ].filter(h => hourFilter === 'all' || hourFilter === h.id);
+
+                                        const rows: {
+                                          time: string;
+                                          endTime: string;
+                                          timeRange: string;
+                                          session: string;
+                                          type: 'patient' | 'buffer' | 'custom' | 'open';
+                                          isBlocked: boolean;
+                                          patientBooking?: any;
+                                        }[] = [];
+
+                                        for (const hBlock of hourBlocks) {
+                                          const totalSlots = Math.max(1, Math.floor(60 / duration));
+                                          for (let sIdx = 0; sIdx < totalSlots; sIdx++) {
+                                            const slotMin = hBlock.startMin + sIdx * duration;
+                                            const timeStr = minutesToTime(slotMin);
+                                            const endTimeStr = minutesToTime(slotMin + duration);
+                                            const rangeStr = `${timeStr} - ${endTimeStr}`;
+
+                                            const patientBooking = dateBookings.find(
+                                              (b: any) => b.date === inspectorDate && b.time === timeStr && b.status !== 'cancelled'
+                                            );
+
+                                            let isBuffer = false;
+                                            if (isBufferEnabled) {
+                                              if (bufferCount >= 4) {
+                                                isBuffer = (sIdx + 1) % Math.max(1, Math.floor(totalSlots / 4)) === 0;
+                                              } else if (bufferCount === 2) {
+                                                isBuffer = sIdx === Math.floor(totalSlots / 2) || sIdx === (totalSlots - 1);
+                                              } else if (bufferCount === 1) {
+                                                isBuffer = sIdx === (totalSlots - 1);
+                                              } else {
+                                                const step = Math.max(1, Math.floor(totalSlots / 4));
+                                                isBuffer = (sIdx === step - 1 || sIdx === step * 2 - 1 || sIdx === step * 3 - 1);
+                                              }
+                                            }
+
+                                            const isCustom = (settings.blockedSlots || []).some(
+                                              (b) => b.date === inspectorDate && b.time === timeStr
+                                            );
+
+                                            const isExplicitUnblocked = (settings.blockedSlots || []).some(
+                                              (b) => b.date === inspectorDate && b.time === `UNBLOCK_${timeStr}`
+                                            );
+
+                                            const isCurrentlyBlocked = !!patientBooking || isCustom || (isBuffer && !isExplicitUnblocked);
+
+                                            rows.push({
+                                              time: timeStr,
+                                              endTime: endTimeStr,
+                                              timeRange: rangeStr,
+                                              session: hBlock.label,
+                                              type: patientBooking ? 'patient' : isCustom ? 'custom' : isBuffer ? 'buffer' : 'open',
+                                              isBlocked: isCurrentlyBlocked,
+                                              patientBooking,
+                                            });
+                                          }
+                                        }
+
+                                        return rows.map((row, idx) => (
+                                          <tr key={idx} className="hover:bg-gray-50/80 transition-colors text-xs font-semibold text-gray-900">
+                                            <td className="py-3 px-4 text-center font-bold text-gray-500 text-[11px] whitespace-nowrap">
+                                              {idx + 1}
+                                            </td>
+                                            <td className="py-3 px-4 font-extrabold text-primary flex items-center gap-1.5 whitespace-nowrap">
+                                              <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                              {row.timeRange}
+                                            </td>
+
+                                            <td className="py-3 px-4 text-gray-600 text-[11px] font-bold whitespace-nowrap">
+                                              {row.session}
+                                            </td>
+
+                                            <td className="py-3 px-4 whitespace-nowrap">
+                                              {row.type === 'patient' ? (
+                                                <span className="text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
+                                                  👤 BOOKED BY PATIENT
+                                                </span>
+                                              ) : row.type === 'custom' ? (
+                                                <span className="text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
+                                                  🚫 CUSTOM BLOCKED
+                                                </span>
+                                              ) : row.type === 'buffer' ? (
+                                                <span className="text-purple-900 bg-purple-100 border border-purple-300 px-2.5 py-1 rounded-full text-[10px] font-black inline-flex items-center gap-1">
+                                                  🛡️ OFFLINE PATIENT RESERVED ({duration}M)
+                                                </span>
+                                              ) : (
+                                                <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1">
+                                                  🟢 PATIENT OPD SLOT
+                                                </span>
+                                              )}
+                                            </td>
+
+                                            <td className="py-3 px-4 whitespace-nowrap">
+                                              {row.patientBooking ? (
+                                                <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">
+                                                  {row.patientBooking.bookingType === 'online' ? '🌐 ONLINE CONSULT' : '🏥 CLINIC VISIT'}
+                                                </span>
+                                              ) : (
+                                                <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                                                  🏥 OFFLINE PATIENT
+                                                </span>
+                                              )}
+                                            </td>
+
+                                            <td className="py-3 px-4 text-center whitespace-nowrap">
+                                              <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full border ${
+                                                row.patientBooking
+                                                  ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                                  : row.isBlocked
+                                                  ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                              }`}>
+                                                {row.patientBooking
+                                                  ? `BOOKED (${row.patientBooking.name})`
+                                                  : row.isBlocked
+                                                  ? 'RESERVED (OFFLINE PATIENT)'
+                                                  : 'AVAILABLE'}
+                                              </span>
+                                            </td>
+
+                                            <td className="py-3 px-4 text-right">
+                                              {row.patientBooking ? (
+                                                <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-200">
+                                                  BOOKED
+                                                </span>
+                                              ) : (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const current = settings.blockedSlots || [];
+                                                    let updated = current;
+                                                    if (row.type === 'custom') {
+                                                      updated = current.filter(b => !(b.date === inspectorDate && b.time === row.time));
+                                                      triggerToast(`🟢 Unblocked custom ${row.time}`);
+                                                    } else if (row.type === 'buffer') {
+                                                      if (row.isBlocked) {
+                                                        updated = [...current, { date: inspectorDate, time: `UNBLOCK_${row.time}` }];
+                                                        triggerToast(`🟢 Toggled OFF (Available) for ${row.time}`);
+                                                      } else {
+                                                        updated = current.filter(b => !(b.date === inspectorDate && b.time === `UNBLOCK_${row.time}`));
+                                                        triggerToast(`🛡️ Toggled ON (Reserved) for ${row.time}`);
+                                                      }
+                                                    } else {
+                                                      if (row.isBlocked) {
+                                                        updated = current.filter(b => !(b.date === inspectorDate && b.time === row.time));
+                                                        triggerToast(`🟢 Unblocked ${row.time}`);
+                                                      } else {
+                                                        updated = [...current, { date: inspectorDate, time: row.time }];
+                                                        triggerToast(`🚫 Blocked ${row.time}`);
+                                                      }
+                                                    }
+                                                    setSettings({ ...settings, blockedSlots: updated });
+                                                    saveSettings({ blockedSlots: updated });
+                                                  }}
+                                                  className={`px-3 py-1 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs ${
+                                                    row.isBlocked
+                                                      ? 'bg-primary hover:bg-primary/90 text-white'
+                                                      : 'bg-red-600 hover:bg-red-700 text-white'
+                                                  }`}
+                                                >
+                                                  {row.isBlocked ? 'TOGGLE OFF' : 'BLOCK SLOT'}
+                                                </button>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ));
+                                      })()}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ) : (
+                              /* Cards View */
+                              <div className="space-y-3 font-sans">
+                                {[
+                                  { id: '11-12', label: '11:00 AM - 12:00 PM', startMins: 660 },
+                                  { id: '12-1', label: '12:00 PM - 01:00 PM', startMins: 720 },
+                                  { id: '1-2', label: '01:00 PM - 02:00 PM', startMins: 780 },
+                                  { id: '2-3', label: '02:00 PM - 03:00 PM', startMins: 840 },
+                                ].filter(h => hourFilter === 'all' || hourFilter === h.id).map((hBlock) => {
+                                  const duration = settings.slotDurationMinutes || 3;
+                                  const slotsInHour: string[] = [];
+                                  for (let m = hBlock.startMins; m < hBlock.startMins + 60; m += duration) {
+                                    slotsInHour.push(minutesToTime(m));
+                                  }
+                                  const bufferCount = settings.hourlyBufferCount ?? 3;
+                                  const isBufferEnabled = settings.autoReserveHourlyBufferSlots ?? true;
+
+                                  return (
+                                    <div key={hBlock.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-2.5">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-black text-gray-900">
+                                          ⏰ {hBlock.label}
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-1.5">
+                                        {slotsInHour.map((timeStr, sIdx) => {
+                                          const totalSlotsInHr = Math.max(1, Math.floor(60 / duration));
+
+                                          const patientBooking = dateBookings.find(
+                                            (b: any) => b.date === inspectorDate && b.time === timeStr && b.status !== 'cancelled'
+                                          );
+
+                                          let isBuffer = false;
+                                          if (isBufferEnabled) {
+                                            if (bufferCount >= 4) {
+                                              isBuffer = (sIdx + 1) % Math.max(1, Math.floor(totalSlotsInHr / 4)) === 0;
+                                            } else if (bufferCount === 2) {
+                                              isBuffer = sIdx === Math.floor(totalSlotsInHr / 2) || sIdx === (totalSlotsInHr - 1);
+                                            } else if (bufferCount === 1) {
+                                              isBuffer = sIdx === (totalSlotsInHr - 1);
+                                            } else {
+                                              const step = Math.max(1, Math.floor(totalSlotsInHr / 4));
+                                              isBuffer = (sIdx === step - 1 || sIdx === step * 2 - 1 || sIdx === step * 3 - 1);
+                                            }
+                                          }
+                                          const isCustomBlocked = (settings.blockedSlots || []).some(
+                                            (b) => b.date === inspectorDate && b.time === timeStr
+                                          );
+                                          return (
+                                            <button
+                                              type="button"
+                                              key={timeStr}
+                                              disabled={!!patientBooking}
+                                              onClick={() => {
+                                                const current = settings.blockedSlots || [];
+                                                let updated = current;
+                                                if (isCustomBlocked) {
+                                                  updated = current.filter(b => !(b.date === inspectorDate && b.time === timeStr));
+                                                } else {
+                                                  updated = [...current, { date: inspectorDate, time: timeStr }];
+                                                }
+                                                setSettings({ ...settings, blockedSlots: updated });
+                                                saveSettings({ blockedSlots: updated });
+                                              }}
+                                              className={`p-1.5 rounded-xl text-[10px] font-bold border transition-all text-center cursor-pointer ${
+                                                patientBooking
+                                                  ? 'bg-blue-600 text-white border-blue-600'
+                                                  : isCustomBlocked
+                                                  ? 'bg-red-600 text-white border-red-600'
+                                                  : isBuffer
+                                                  ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                                  : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
+                                              }`}
+                                              title={patientBooking ? `Booked by ${patientBooking.name}` : timeStr}
+                                            >
+                                              {patientBooking ? `👤 ${timeStr}` : timeStr}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SUB-TAB 2: OPD Schedule & Working Days */}
+                      {rulesSubTab === 'schedule' && (
+                        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-6">
+                          <div className="flex items-center gap-3 border-b pb-3">
+                            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold">
+                              <CalendarDays className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">OPD Timings & Working Days</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Configure working days, session hours, and booking notice windows</p>
+                            </div>
                           </div>
 
-                          {/* Session Timings (Morning & Evening OPD Session timings) */}
-                          <div className="pt-3 border-t border-gray-150 space-y-3">
-                            <label className="text-xs font-bold text-gray-800 block">OPD Session Timings</label>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Morning Hours</span>
-                                <div className="flex gap-1.5 items-center">
+                          {/* Session Timings */}
+                          <div className="space-y-3">
+                            <label className="text-xs font-bold text-gray-800 block">OPD Session Timings (24-Hour Format)</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2">
+                                <span className="text-xs font-bold text-gray-700 block">Morning Hours</span>
+                                <div className="flex gap-2 items-center">
                                   <input
                                     type="text"
                                     value={settings.morningStart}
                                     onChange={(e) => setSettings({ ...settings, morningStart: e.target.value })}
                                     placeholder="09:00"
-                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-white focus:border-primary outline-none"
                                   />
                                   <span className="text-gray-400 font-bold text-xs">-</span>
                                   <input
@@ -1681,19 +2779,20 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                                     value={settings.morningEnd}
                                     onChange={(e) => setSettings({ ...settings, morningEnd: e.target.value })}
                                     placeholder="14:00"
-                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-white focus:border-primary outline-none"
                                   />
                                 </div>
                               </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Evening Hours</span>
-                                <div className="flex gap-1.5 items-center">
+
+                              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-2">
+                                <span className="text-xs font-bold text-gray-700 block">Evening Hours</span>
+                                <div className="flex gap-2 items-center">
                                   <input
                                     type="text"
                                     value={settings.eveningStart}
                                     onChange={(e) => setSettings({ ...settings, eveningStart: e.target.value })}
                                     placeholder="17:00"
-                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-white focus:border-primary outline-none"
                                   />
                                   <span className="text-gray-400 font-bold text-xs">-</span>
                                   <input
@@ -1701,340 +2800,769 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                                     value={settings.eveningEnd}
                                     onChange={(e) => setSettings({ ...settings, eveningEnd: e.target.value })}
                                     placeholder="21:00"
-                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-gray-50/50 focus:bg-white focus:border-primary outline-none"
+                                    className="w-full text-center border rounded-xl py-2 text-xs font-bold bg-white focus:border-primary outline-none"
                                   />
                                 </div>
                               </div>
                             </div>
                           </div>
 
-                        </div>
+                          {/* Days Selector */}
+                          <div className="pt-3 border-t border-gray-150 space-y-2">
+                            <label className="text-xs font-bold text-gray-800 block">Clinic Open Days</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
+                              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                                const isOpen = settings.availableDays?.includes(day);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={day}
+                                    onClick={() => {
+                                      const current = settings.availableDays || [];
+                                      const next = isOpen ? current.filter((d) => d !== day) : [...current, day];
+                                      setSettings({ ...settings, availableDays: next });
+                                    }}
+                                    className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
+                                      isOpen
+                                        ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                                        : 'bg-gray-100 text-gray-400 border-gray-200 line-through'
+                                    }`}
+                                  >
+                                    {day.slice(0, 3)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
 
-                        {/* Consultation Pricing Matrix Card (Moved from Clinic Settings) */}
-                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
+                          {/* Advance Booking Window */}
+                          <div className="pt-3 border-t border-gray-150 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-gray-800">Advance Booking Open Window (Days)</label>
+                              <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
+                                {settings.advanceBookingDays || 7} Days Open
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-5 gap-2">
+                              {[1, 3, 7, 14, 30].map((days) => (
+                                <button
+                                  type="button"
+                                  key={days}
+                                  onClick={() => setSettings({ ...settings, advanceBookingDays: days })}
+                                  className={`py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                                    (settings.advanceBookingDays || 7) === days
+                                      ? 'bg-primary text-white border-primary shadow-xs'
+                                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  {days} {days === 1 ? 'Day' : 'Days'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SUB-TAB 3: Consultation Fees & Payment Rules */}
+                      {rulesSubTab === 'fees' && (
+                        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-6">
                           <div className="flex items-center gap-3 border-b pb-3">
                             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
                               <DollarSign className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Consultation Pricing Matrix (INR ₹)</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Standard consultation rates auto-applied during booking & payments</p>
+                              <h3 className="font-playfair font-bold text-base text-gray-900">Consultation Pricing & Payment Rules</h3>
+                              <p className="text-[10px] text-gray-500 font-semibold">Configure OPD fees, advance pre-booking charges, and payment timing</p>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Clinic Checkup Fee</span>
-                              <div className="relative">
-                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                                <input
-                                  type="number"
-                                  value={settings.consultationFee}
-                                  onChange={(e) => setSettings({ ...settings, consultationFee: Number(e.target.value) })}
-                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Online Video Fee</span>
-                              <div className="relative">
-                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                                <input
-                                  type="number"
-                                  value={settings.onlineConsultationFee}
-                                  onChange={(e) => setSettings({ ...settings, onlineConsultationFee: Number(e.target.value) })}
-                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Walk-in Offline Fee</span>
-                              <div className="relative">
-                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                                <input
-                                  type="number"
-                                  value={settings.offlineConsultationFee}
-                                  onChange={(e) => setSettings({ ...settings, offlineConsultationFee: Number(e.target.value) })}
-                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="bg-gray-50/70 border border-gray-200/70 rounded-2xl p-4 space-y-2">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 block">Emergency Fee</span>
-                              <div className="relative">
-                                <span className="absolute left-3.5 top-2.5 text-xs font-black text-gray-400">₹</span>
-                                <input
-                                  type="number"
-                                  value={settings.emergencyFee}
-                                  onChange={(e) => setSettings({ ...settings, emergencyFee: Number(e.target.value) })}
-                                  className="w-full pl-8 pr-3 py-2 border rounded-xl text-sm font-bold text-gray-900 bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Working Days Card */}
-                        <div className="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
-                          <div className="flex items-center gap-3 border-b pb-3">
-                            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                              <Calendar className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Working Days</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Toggle open & closed days for appointments</p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2 pt-1">
-                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
-                              const isOpen = settings.onlineDays?.includes(day) || settings.availableDays?.includes(day);
-                              return (
-                                <label
-                                  key={day}
-                                  className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${isOpen
-                                    ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
-                                    : 'bg-gray-50/50 border-gray-200 text-gray-500 hover:bg-gray-50'
-                                    }`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className={`w-2.5 h-2.5 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-                                    <span className="text-xs font-bold">{day}</span>
-                                  </div>
-
-                                  <div className="flex items-center gap-3">
-                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${isOpen ? 'bg-emerald-200 text-emerald-800' : 'bg-gray-200 text-gray-600'
-                                      }`}>
-                                      {isOpen ? 'Clinic Open' : 'Closed'}
-                                    </span>
-                                    <input
-                                      type="checkbox"
-                                      checked={isOpen}
-                                      onChange={(e) => {
-                                        const nextOnlineDays = e.target.checked
-                                          ? [...(settings.onlineDays || []), day]
-                                          : (settings.onlineDays || []).filter(d => d !== day);
-                                        const nextAvailableDays = e.target.checked
-                                          ? [...(settings.availableDays || []), day]
-                                          : (settings.availableDays || []).filter(d => d !== day);
-                                        setSettings({
-                                          ...settings,
-                                          onlineDays: nextOnlineDays,
-                                          availableDays: nextAvailableDays
-                                        });
-                                      }}
-                                      className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
-                                    />
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Card: Holidays & Blocked Slots Manager */}
-                        <div className="lg:col-span-12 bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-6 hover:shadow-md transition-all text-left">
-                          <div className="flex items-center gap-3 border-b pb-3">
-                            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                              <Calendar className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Manage Holidays & Blocked Slots</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Declare full-day clinic leaves or block specific time slots</p>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            {/* Left: Holidays List & Add */}
-                            <div className="space-y-4">
-                              <h4 className="font-sans text-xs font-bold text-gray-800 uppercase tracking-wider">Full-Day Holidays / Leaves</h4>
-                              
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] font-black uppercase text-gray-500">Select Date</label>
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="date"
-                                    id="newHolidayDate"
-                                    className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer flex-1"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const input = document.getElementById('newHolidayDate') as HTMLInputElement;
-                                      if (input && input.value) {
-                                        const date = input.value;
-                                        if (settings.holidays?.includes(date)) {
-                                          triggerToast('Date is already added as holiday');
-                                          return;
-                                        }
-                                        const updatedHolidays = [...(settings.holidays || []), date];
-                                        saveSettings({ holidays: updatedHolidays });
-                                        input.value = '';
-                                      } else {
-                                        triggerToast('Please select a date first');
-                                      }
-                                    }}
-                                    className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer outline-none shrink-0"
-                                  >
-                                    Add Leave
-                                  </button>
-                                </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Clinic OPD Visit Rules */}
+                            <div className="p-5 bg-emerald-50/50 border border-emerald-200/80 rounded-2xl space-y-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black uppercase text-emerald-950 tracking-wider">
+                                  🏥 Clinic OPD Visit Rules
+                                </span>
+                                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  {(settings.offlinePaymentTiming || (settings.offlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'pre_booking' ? '⚡ Advance Prepayment' : '🏥 Pay at Clinic Desk'}
+                                </span>
                               </div>
 
-                              <div className="max-h-[220px] overflow-y-auto border border-gray-150 rounded-xl divide-y divide-gray-100 bg-gray-50/20">
-                                {settings.holidays && settings.holidays.length > 0 ? (
-                                  settings.holidays.map((date) => (
-                                    <div key={date} className="flex items-center justify-between p-3">
-                                      <span className="font-mono text-xs text-gray-700 font-bold">
-                                        {new Date(date).toLocaleDateString('en-US', {
-                                          weekday: 'short',
-                                          year: 'numeric',
-                                          month: 'short',
-                                          day: 'numeric',
-                                        })}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const updatedHolidays = (settings.holidays || []).filter(d => d !== date);
-                                          saveSettings({ holidays: updatedHolidays });
-                                        }}
-                                        className="text-gray-400 hover:text-rose-600 transition-colors p-1 cursor-pointer"
-                                        aria-label={`Remove holiday date: ${date}`}
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="text-xs text-gray-400 italic p-4 text-center">No holiday dates declared yet.</p>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Right: Block specific slots */}
-                            <div className="space-y-4">
-                              <h4 className="font-sans text-xs font-bold text-gray-800 uppercase tracking-wider">Block Specific Time Ranges</h4>
-                              
-                              <div className="flex flex-col gap-3">
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] font-black uppercase text-gray-500">Select Date</label>
-                                  <input
-                                    type="date"
-                                    id="blockSlotDate"
-                                    className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
-                                  />
-                                </div>
-                                
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-black uppercase text-gray-500">From Time</label>
-                                    <input
-                                      type="time"
-                                      id="blockSlotFromTime"
-                                      className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
-                                    />
-                                  </div>
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-black uppercase text-gray-500">To Time</label>
-                                    <input
-                                      type="time"
-                                      id="blockSlotToTime"
-                                      className="px-3 py-2.5 border rounded-xl text-xs font-bold text-gray-900 bg-gray-50/50 focus:bg-white focus:border-primary outline-none transition-all cursor-pointer"
-                                    />
-                                  </div>
-                                </div>
-
+                              <div className="grid grid-cols-2 gap-2 font-sans">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    const dateInput = document.getElementById('blockSlotDate') as HTMLInputElement;
-                                    const fromTimeInput = document.getElementById('blockSlotFromTime') as HTMLInputElement;
-                                    const toTimeInput = document.getElementById('blockSlotToTime') as HTMLInputElement;
-                                    if (dateInput?.value && fromTimeInput?.value && toTimeInput?.value) {
-                                      const date = dateInput.value;
-                                      const fromTime = fromTimeInput.value;
-                                      const toTime = toTimeInput.value;
-                                      
-                                      if (fromTime >= toTime) {
-                                        triggerToast('From Time must be before To Time');
-                                        return;
-                                      }
-
-                                      const timeRange = `${fromTime}-${toTime}`;
-                                      
-                                      if (settings.blockedSlots?.some(s => s.date === date && s.time === timeRange)) {
-                                        triggerToast('This time range is already blocked');
-                                        return;
-                                      }
-
-                                      saveSettings({ blockSlot: { date, time: timeRange } });
-                                      dateInput.value = '';
-                                      fromTimeInput.value = '';
-                                      toTimeInput.value = '';
-                                    } else {
-                                      triggerToast('Please select date, from-time and to-time');
-                                    }
-                                  }}
-                                  className="w-full py-2.5 bg-gray-800 hover:bg-gray-900 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer outline-none"
+                                  onClick={() => setSettings({ ...settings, offlinePaymentTiming: 'pre_booking', offlinePaymentMandatory: true })}
+                                  className={`py-2 px-2 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                                    (settings.offlinePaymentTiming || (settings.offlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'pre_booking'
+                                      ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                  }`}
                                 >
-                                  Block Time Range
+                                  ⚡ Pre-Booking Advance
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSettings({ ...settings, offlinePaymentTiming: 'after_booking', offlinePaymentMandatory: false })}
+                                  className={`py-2 px-2 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                                    (settings.offlinePaymentTiming || (settings.offlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'after_booking'
+                                      ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  🏥 Pay at Desk (Later)
                                 </button>
                               </div>
 
-                              <div className="max-h-[220px] overflow-y-auto border border-gray-150 rounded-xl divide-y divide-gray-100 bg-gray-50/20">
-                                {settings.blockedSlots && settings.blockedSlots.length > 0 ? (
-                                  settings.blockedSlots.map((slot, idx) => (
-                                    <div key={idx} className="flex items-center justify-between p-3">
-                                      <div className="flex flex-col">
-                                        <span className="font-sans text-xs text-gray-800 font-bold">
-                                          {new Date(slot.date).toLocaleDateString('en-US', {
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric',
-                                          })}
-                                        </span>
-                                        <span className="font-mono text-[10px] text-gray-500 font-semibold mt-0.5">
-                                          Time: {slot.time.includes('-') ? slot.time.replace('-', ' to ') : slot.time}
-                                        </span>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          saveSettings({ unblockSlot: { date: slot.date, time: slot.time } });
+                              <div className="grid grid-cols-2 gap-3 pt-1">
+                                {(settings.offlinePaymentTiming || (settings.offlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'pre_booking' && (
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-gray-600 block">Pre-Booking Fee (Online QR)</span>
+                                    <div className="relative">
+                                      <span className="absolute left-3 top-2 text-xs font-black text-gray-400">₹</span>
+                                      <input
+                                        type="number"
+                                        value={settings.offlinePreBookingFee === undefined || settings.offlinePreBookingFee === null ? '' : settings.offlinePreBookingFee}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setSettings({ ...settings, offlinePreBookingFee: val === '' ? ('' as any) : Number(val) });
                                         }}
-                                        className="text-gray-400 hover:text-rose-600 transition-colors p-1 cursor-pointer"
-                                        aria-label={`Unblock slot ${slot.time} on ${slot.date}`}
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
+                                        placeholder="50"
+                                        className="w-full pl-7 pr-2 py-1.5 border rounded-xl text-xs font-bold text-gray-900 bg-white focus:border-emerald-500 outline-none"
+                                      />
                                     </div>
-                                  ))
-                                ) : (
-                                  <p className="text-xs text-gray-400 italic p-4 text-center">No individual slots blocked yet.</p>
+                                  </div>
                                 )}
+
+                                <div className={`space-y-1 ${(settings.offlinePaymentTiming || (settings.offlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'after_booking' ? 'col-span-2' : ''}`}>
+                                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-600 block">Total OPD Fee</span>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-2 text-xs font-black text-gray-400">₹</span>
+                                    <input
+                                      type="number"
+                                      value={settings.offlineConsultationFee === undefined || settings.offlineConsultationFee === null ? '' : settings.offlineConsultationFee}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        const num = val === '' ? ('' as any) : Number(val);
+                                        setSettings({ ...settings, offlineConsultationFee: num, consultationFee: num });
+                                      }}
+                                      placeholder="200"
+                                      className="w-full pl-7 pr-2 py-1.5 border rounded-xl text-xs font-bold text-gray-900 bg-white focus:border-emerald-500 outline-none"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Online Video Consult Rules */}
+                            <div className="p-5 bg-teal-50/50 border border-teal-200/80 rounded-2xl space-y-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black uppercase text-teal-950 tracking-wider">
+                                  🌐 Online Video Consult Rules
+                                </span>
+                                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                                  {(settings.onlinePaymentTiming || (settings.onlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'pre_booking' ? '⚡ Prepayment' : '⏳ Pay After'}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 font-sans">
+                                <button
+                                  type="button"
+                                  onClick={() => setSettings({ ...settings, onlinePaymentTiming: 'pre_booking', onlinePaymentMandatory: true })}
+                                  className={`py-2 px-2 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                                    (settings.onlinePaymentTiming || (settings.onlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'pre_booking'
+                                      ? 'bg-teal-700 text-white border-teal-700 shadow-2xs'
+                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  ⚡ Advance Prepayment
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSettings({ ...settings, onlinePaymentTiming: 'after_booking', onlinePaymentMandatory: false })}
+                                  className={`py-2 px-2 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+                                    (settings.onlinePaymentTiming || (settings.onlinePaymentMandatory ? 'pre_booking' : 'after_booking')) === 'after_booking'
+                                      ? 'bg-teal-700 text-white border-teal-700 shadow-2xs'
+                                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  ⏳ Pay After Consult
+                                </button>
+                              </div>
+
+                              <div className="pt-1">
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-600 block">Total Video Consultation Fee</span>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-2 text-xs font-black text-gray-400">₹</span>
+                                    <input
+                                      type="number"
+                                      value={settings.onlineConsultationFee === undefined || settings.onlineConsultationFee === null ? '' : settings.onlineConsultationFee}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        const num = val === '' ? ('' as any) : Number(val);
+                                        setSettings({ ...settings, onlineConsultationFee: num, onlinePreBookingFee: num });
+                                      }}
+                                      placeholder="500"
+                                      className="w-full pl-7 pr-2 py-1.5 border rounded-xl text-xs font-bold text-gray-900 bg-white focus:border-teal-500 outline-none"
+                                    />
+                                  </div>
+                                  <p className="text-[10px] text-gray-500 font-semibold mt-1">
+                                    • Online Video Consult me ek hi full payment rahta hai jo booking ke samay ek saath pay karna hota hai.
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
+                      )}
 
-                      </div>
+                      {/* SUB-TAB 4: Calendar Date & Time Slot Blocker */}
+                      {rulesSubTab === 'block' && (
+                        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-6">
+                          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b pb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
+                                <Calendar className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Date & Time Slot Blocker</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Manage per-hour buffer slots and custom holiday/slot blocks in list view</p>
+                              </div>
+                            </div>
 
+                            {/* Top Controls: Date Selector & Custom Block Toggle Button */}
+                            <div className="flex items-center gap-2">
+                              {fetchingDateBookings && (
+                                <span className="text-[11px] font-bold text-purple-700 flex items-center gap-1.5 bg-purple-50 px-2.5 py-1 rounded-xl border border-purple-200 animate-pulse">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                                  <span>Loading Date...</span>
+                                </span>
+                              )}
+                              <input
+                                type="date"
+                                value={inspectorDate}
+                                onChange={(e) => preserveAllScroll(() => setInspectorDate(e.target.value))}
+                                className="px-3 py-1.5 border border-gray-300 rounded-xl text-xs font-bold text-gray-900 bg-white outline-none focus:border-primary cursor-pointer shadow-2xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowCustomBlockForm(!showCustomBlockForm)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                                  showCustomBlockForm
+                                    ? 'bg-red-600 text-white border-red-600'
+                                    : 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200'
+                                }`}
+                              >
+                                <span>➕ Custom Block</span>
+                              </button>
+                            </div>
+                          </div>
 
+                          {/* Custom Block Input Form (Collapsible / Toggleable) */}
+                          {showCustomBlockForm && (
+                            <div className="p-4 bg-red-50/50 border border-red-200 rounded-2xl space-y-3">
+                              <h4 className="text-xs font-bold text-red-950 uppercase tracking-wider">➕ Add Custom Blocked Date / Slot</h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-bold text-gray-700 block">Date *</label>
+                                  <input
+                                    type="date"
+                                    value={blockDateInput || inspectorDate}
+                                    onChange={(e) => setBlockDateInput(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-white focus:border-red-500 outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-bold text-gray-700 block">Custom Time Slot (e.g. 11:15 AM - 11:30 AM or Full Day)</label>
+                                  <input
+                                    type="text"
+                                    value={blockTimeInput}
+                                    onChange={(e) => setBlockTimeInput(e.target.value)}
+                                    placeholder="e.g. 11:15 AM - 11:30 AM or Full Day"
+                                    className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-gray-900 bg-white focus:border-red-500 outline-none"
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                     const currentScroll = mainScrollRef.current?.scrollTop;
+                                     const dateVal = blockDateInput || inspectorDate;
+                                     if (!dateVal) {
+                                       triggerToast('⚠️ Please select a date');
+                                       return;
+                                     }
+                                     const timeVal = blockTimeInput.trim() || 'Full Day';
+                                     const currentBlocked = settings.blockedSlots || [];
+                                     if (currentBlocked.some(b => b.date === dateVal && b.time === timeVal)) {
+                                       triggerToast('⚠️ Already blocked');
+                                       return;
+                                     }
+                                     const updated = [...currentBlocked, { date: dateVal, time: timeVal }];
+                                     setSettings({ ...settings, blockedSlots: updated });
+                                     saveSettings({ ...settings, blockedSlots: updated });
+                                     setBlockTimeInput('');
+                                     setShowCustomBlockForm(false);
+                                     triggerToast(`✅ Blocked ${dateVal} (${timeVal})`);
+                                     if (currentScroll !== undefined && mainScrollRef.current) {
+                                       requestAnimationFrame(() => {
+                                         if (mainScrollRef.current) mainScrollRef.current.scrollTop = currentScroll;
+                                       });
+                                     }
+                                   }}
+                                  className="w-full py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                                >
+                                  Save Custom Block
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Per-Hour Filter Pills */}
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-gray-800 block">Per-Hour Slot Filter:</label>
+                            <div className="flex flex-wrap gap-2">
+                              {[
+                                { id: 'all', label: 'All Hours (11 AM - 3 PM)' },
+                                { id: '11-12', label: '11:00 AM - 12:00 PM' },
+                                { id: '12-1', label: '12:00 PM - 01:00 PM' },
+                                { id: '1-2', label: '01:00 PM - 02:00 PM' },
+                                { id: '2-3', label: '02:00 PM - 03:00 PM' },
+                              ].map((f) => (
+                                <button
+                                  type="button"
+                                  key={f.id}
+                                  onClick={() => setHourFilter(f.id as any)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                    hourFilter === f.id
+                                      ? 'bg-primary text-white border-primary shadow-2xs'
+                                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  {f.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Booked / Reserved Slots List View */}
+                          <div className="space-y-3 pt-2">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-black uppercase text-gray-900 tracking-wider">
+                                📋 Reserved / Booked Timing Slots List ({inspectorDate})
+                              </h4>
+                              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
+                                🛡️ Auto-Buffer: {(settings.autoReserveHourlyBufferSlots ?? true) ? 'ON (3 Slots/Hr)' : 'OFF'}
+                              </span>
+                            </div>
+
+                            {/* Render List Items */}
+                            {(() => {
+                              const duration = settings.slotDurationMinutes || 3;
+                              const bufferCount = settings.hourlyBufferCount ?? 3;
+                              const isBufferEnabled = settings.autoReserveHourlyBufferSlots ?? true;
+
+                              const hourBlocks = [
+                                { id: '11-12', label: '11:00 AM - 12:00 PM', startMin: 660 },
+                                { id: '12-1', label: '12:00 PM - 01:00 PM', startMin: 720 },
+                                { id: '1-2', label: '01:00 PM - 02:00 PM', startMin: 780 },
+                                { id: '2-3', label: '02:00 PM - 03:00 PM', startMin: 840 },
+                              ].filter(h => hourFilter === 'all' || hourFilter === h.id);
+
+                              const itemsList: {
+                                time: string;
+                                hourLabel: string;
+                                type: 'auto-buffer' | 'custom-block';
+                                isBlocked: boolean;
+                              }[] = [];
+
+                              for (const hBlock of hourBlocks) {
+                                const totalSlots = Math.max(1, Math.floor(60 / duration));
+                                for (let sIdx = 0; sIdx < totalSlots; sIdx++) {
+                                  const slotMin = hBlock.startMin + sIdx * duration;
+                                  const timeStr = minutesToTime(slotMin);
+
+                                  let isBuffer = false;
+                                  if (isBufferEnabled) {
+                                    if (bufferCount >= 4) {
+                                      isBuffer = (sIdx + 1) % Math.max(1, Math.floor(totalSlots / 4)) === 0;
+                                    } else if (bufferCount === 2) {
+                                      isBuffer = sIdx === Math.floor(totalSlots / 2) || sIdx === (totalSlots - 1);
+                                    } else if (bufferCount === 1) {
+                                      isBuffer = sIdx === (totalSlots - 1);
+                                    } else {
+                                      const step = Math.max(1, Math.floor(totalSlots / 4));
+                                      isBuffer = (sIdx === step - 1 || sIdx === step * 2 - 1 || sIdx === step * 3 - 1);
+                                    }
+                                  }
+
+                                  const isCustom = (settings.blockedSlots || []).some(
+                                    (b) => b.date === inspectorDate && b.time === timeStr
+                                  );
+
+                                  if (isBuffer || isCustom) {
+                                    const isCurrentlyBlocked = isCustom || (isBuffer && !(settings.blockedSlots || []).some(b => b.date === inspectorDate && b.time === `UNBLOCK_${timeStr}`));
+                                    if (isCurrentlyBlocked) {
+                                      itemsList.push({
+                                        time: timeStr,
+                                        hourLabel: hBlock.label,
+                                        type: isCustom ? 'custom-block' : 'auto-buffer',
+                                        isBlocked: true,
+                                      });
+                                    }
+                                  }
+                                }
+                              }
+
+                              (settings.blockedSlots || [])
+                                .filter(b => b.date === inspectorDate && !b.time.startsWith('UNBLOCK_'))
+                                .forEach(b => {
+                                  if (!itemsList.some(item => item.time === b.time)) {
+                                    itemsList.push({
+                                      time: b.time,
+                                      hourLabel: 'Custom Block',
+                                      type: 'custom-block',
+                                      isBlocked: true,
+                                    });
+                                  }
+                                });
+
+                              if (fetchingDateBookings) {
+                                return (
+                                  <div className="p-8 bg-purple-50/40 border border-purple-200 rounded-2xl text-center space-y-2 animate-pulse">
+                                    <Loader2 className="w-5 h-5 animate-spin text-purple-600 mx-auto" />
+                                    <p className="text-xs font-bold text-purple-900">Refreshing slots & bookings for {inspectorDate}...</p>
+                                  </div>
+                                );
+                              }
+
+                              if (itemsList.length === 0) {
+                                return (
+                                  <div className="p-6 bg-gray-50 border border-gray-200 rounded-2xl text-center">
+                                    <p className="text-xs text-gray-500 font-semibold italic">
+                                      No active blocked or reserved slots for {inspectorDate} ({hourFilter === 'all' ? 'All Hours' : hourFilter}).
+                                    </p>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="space-y-2">
+                                  {itemsList.map((item, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`py-2.5 px-4 rounded-xl border flex items-center justify-between transition-all ${
+                                        item.isBlocked
+                                          ? 'bg-purple-50/50 border-purple-200 shadow-2xs'
+                                          : 'bg-white border-gray-200 hover:border-gray-300'
+                                      }`}
+                                    >
+                                      {/* Left: Time & Type Badge */}
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-xs font-mono font-bold text-gray-400 w-6">#{idx + 1}</span>
+                                        <span className="text-xs font-black text-gray-900 w-20">{item.time}</span>
+                                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-md ${
+                                          item.type === 'custom-block'
+                                            ? 'bg-red-100 text-red-800 border border-red-200'
+                                            : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                        }`}>
+                                          {item.type === 'custom-block' ? 'Custom Block' : 'Auto Buffer'}
+                                        </span>
+                                      </div>
+
+                                      {/* Right: Status text & Toggle switch */}
+                                      <div className="flex items-center gap-3">
+                                        <span className={`text-xs font-bold ${item.isBlocked ? 'text-purple-700' : 'text-gray-400'}`}>
+                                          {item.isBlocked ? 'ON (Booked)' : 'OFF (Available)'}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const currentScroll = mainScrollRef.current?.scrollTop;
+                                            const current = settings.blockedSlots || [];
+                                            let updated;
+                                            if (item.type === 'custom-block') {
+                                              updated = current.filter(b => !(b.date === inspectorDate && b.time === item.time));
+                                              triggerToast(`🟢 Unblocked custom slot ${item.time}`);
+                                            } else {
+                                              if (item.isBlocked) {
+                                                updated = [...current, { date: inspectorDate, time: `UNBLOCK_${item.time}` }];
+                                                triggerToast(`🟢 Toggled OFF (Available) for ${item.time}`);
+                                              } else {
+                                                updated = current.filter(b => !(b.date === inspectorDate && b.time === `UNBLOCK_${item.time}`));
+                                                triggerToast(`🛡️ Toggled ON (Reserved) for ${item.time}`);
+                                              }
+                                            }
+                                            setSettings({ ...settings, blockedSlots: updated });
+                                            saveSettings({ ...settings, blockedSlots: updated });
+                                            if (currentScroll !== undefined && mainScrollRef.current) {
+                                              requestAnimationFrame(() => {
+                                                if (mainScrollRef.current) mainScrollRef.current.scrollTop = currentScroll;
+                                              });
+                                            }
+                                          }}
+                                          className={`w-10 h-5 rounded-full transition-colors relative shrink-0 p-0.5 cursor-pointer ${
+                                            item.isBlocked ? 'bg-purple-600' : 'bg-gray-300'
+                                          }`}
+                                        >
+                                          <div className={`w-4 h-4 rounded-full bg-white shadow-xs transform transition-transform ${
+                                            item.isBlocked ? 'translate-x-5' : 'translate-x-0'
+                                          }`} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
 
                       <button
                         type="button"
-                        disabled={loading}
+                        disabled={loading || isSavingSettings}
                         onClick={() => saveSettings(settings)}
-                        className="w-full py-4 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md outline-none cursor-pointer text-xs uppercase tracking-wider transition-all"
+                        className={`w-full py-4 font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md outline-none cursor-pointer text-xs uppercase tracking-wider transition-all ${
+                          isSavedSuccess
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-400'
+                            : isSavingSettings
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white'
+                        }`}
                       >
-                        <Save className="w-4 h-4 text-emerald-300" />
-                        Save Booking Rules Settings
+                        {isSavingSettings ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-white" />
+                            <span>Saving Booking Rules Settings...</span>
+                          </>
+                        ) : isSavedSuccess ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 text-white" />
+                            <span>Settings Saved!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 text-emerald-300" />
+                            <span>Save Booking Rules Settings</span>
+                          </>
+                        )}
                       </button>
                     </form>
+                  )}
+                </div>
+              )}
+
+              {/* PATIENT SUPPORT TICKETS & HELPDESK */}
+              {tab === 'support' && (
+                <div className="space-y-6">
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-200 shadow-xs">
+                    <div>
+                      <h2 className="font-playfair text-2xl font-black text-gray-900 flex items-center gap-2">
+                        <LifeBuoy className="w-6 h-6 text-teal-600" /> Patient Support Tickets & Helpdesk
+                      </h2>
+                      <p className="text-xs text-gray-500 font-semibold mt-1">
+                        View patient support queries, booking help requests, and reply directly to resolve tickets.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 bg-rose-100 text-rose-700 text-xs font-bold rounded-full border border-rose-200">
+                        🔴 {supportTickets.filter(t => t.status === 'open').length} Open Tickets
+                      </span>
+                      <button
+                        onClick={refresh}
+                        className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors"
+                        title="Refresh Support Tickets"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {[
+                      { id: 'all', label: 'All Tickets', count: supportTickets.length },
+                      { id: 'open', label: '🔴 Open', count: supportTickets.filter(t => t.status === 'open').length },
+                      { id: 'in_progress', label: '⏳ In Progress', count: supportTickets.filter(t => t.status === 'in_progress').length },
+                      { id: 'resolved', label: '✅ Resolved', count: supportTickets.filter(t => t.status === 'resolved').length },
+                    ].map((filterItem) => (
+                      <button
+                        key={filterItem.id}
+                        onClick={() => setTicketStatusFilter(filterItem.id as any)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 flex items-center gap-1.5 ${
+                          ticketStatusFilter === filterItem.id
+                            ? 'bg-[#0B1B29] text-white border-[#0B1B29] shadow-xs'
+                            : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>{filterItem.label}</span>
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-800">
+                          {filterItem.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tickets List Grid */}
+                  {supportTickets.filter(t => ticketStatusFilter === 'all' ? true : t.status === ticketStatusFilter).length === 0 ? (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center space-y-3">
+                      <LifeBuoy className="w-12 h-12 text-gray-300 mx-auto" />
+                      <h3 className="font-playfair text-lg font-bold text-gray-700">कोई सपोर्ट टिकट नहीं मिला / No tickets found</h3>
+                      <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                        अभी इस फ़िल्टर में कोई पेशेंट सहायता टिकट दर्ज नहीं है। New patient support requests will appear here with red notification badges.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {supportTickets
+                        .filter(t => ticketStatusFilter === 'all' ? true : t.status === ticketStatusFilter)
+                        .map((ticket) => (
+                          <div
+                            key={ticket.id}
+                            className={`bg-white border rounded-2xl p-5 shadow-xs transition-all flex flex-col justify-between space-y-4 ${
+                              ticket.status === 'open'
+                                ? 'border-rose-300 ring-1 ring-rose-300/50 bg-rose-50/10'
+                                : ticket.status === 'in_progress'
+                                ? 'border-amber-300 bg-amber-50/10'
+                                : 'border-gray-200'
+                            }`}
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <span className="font-mono text-[10px] font-black text-teal-700 uppercase bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                                    {ticket.ticketId}
+                                  </span>
+                                  <h3 className="font-playfair text-base font-bold text-gray-900 mt-1">
+                                    {ticket.subject}
+                                  </h3>
+                                </div>
+                                <span
+                                  className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase border shrink-0 ${
+                                    ticket.status === 'open'
+                                      ? 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse'
+                                      : ticket.status === 'in_progress'
+                                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                      : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  }`}
+                                >
+                                  {ticket.status === 'open' ? '🔴 Open' : ticket.status === 'in_progress' ? '⏳ In Progress' : '✅ Resolved'}
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-150 whitespace-pre-wrap">
+                                {ticket.message}
+                              </p>
+
+                              {ticket.reply && (
+                                <div className="p-3 rounded-xl bg-teal-50 border border-teal-200 space-y-1">
+                                  <span className="text-[10px] font-black text-teal-800 uppercase block">💬 Staff Response:</span>
+                                  <p className="text-xs text-teal-900 font-medium">{ticket.reply}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="pt-3 border-t border-gray-150 flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-bold text-gray-900">{ticket.name}</p>
+                                <p className="text-[11px] text-gray-500 font-mono">{ticket.phone}</p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={`https://wa.me/91${ticket.phone.replace(/[^0-9]/g, '')}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-2 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors border border-emerald-200"
+                                  title="WhatsApp Patient"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                </a>
+                                <button
+                                  onClick={() => {
+                                    setReplyModalTicket(ticket);
+                                    setReplyText(ticket.reply || '');
+                                  }}
+                                  className="px-3 py-1.5 bg-[#0B1B29] text-white rounded-xl text-xs font-bold hover:bg-[#112334] transition-colors shadow-xs flex items-center gap-1"
+                                >
+                                  <span>Reply / Resolve</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Reply Modal */}
+                  {replyModalTicket && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+                      <div className="bg-white rounded-3xl p-6 shadow-2xl border border-gray-200 w-full max-w-md space-y-4">
+                        <div className="flex items-center justify-between border-b pb-3">
+                          <div>
+                            <h3 className="font-playfair text-base font-bold text-gray-900">
+                              Reply to Ticket {replyModalTicket.ticketId}
+                            </h3>
+                            <p className="text-xs text-gray-500">{replyModalTicket.name} ({replyModalTicket.phone})</p>
+                          </div>
+                          <button
+                            onClick={() => setReplyModalTicket(null)}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Response Message for Patient</label>
+                            <textarea
+                              rows={4}
+                              value={replyText}
+                              onChange={(e) => setReplyText(e.target.value)}
+                              placeholder="यहाँ अपना उत्तर/समाधान लिखें..."
+                              className="w-full p-3 rounded-xl border border-gray-300 text-xs font-medium focus:ring-2 focus:ring-primary outline-none"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-2">
+                            <button
+                              onClick={async () => {
+                                if (!replyModalTicket) return;
+                                await fetch('/api/support', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ id: replyModalTicket.id, status: 'resolved', reply: replyText }),
+                                });
+                                setReplyModalTicket(null);
+                                refresh();
+                                triggerToast('Ticket marked as Resolved!');
+                              }}
+                              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
+                            >
+                              ✅ Save Response & Resolve
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!replyModalTicket) return;
+                                await fetch('/api/support', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ id: replyModalTicket.id, status: 'in_progress', reply: replyText }),
+                                });
+                                setReplyModalTicket(null);
+                                refresh();
+                                triggerToast('Ticket status updated to In Progress');
+                              }}
+                              className="px-3 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
+                            >
+                              ⏳ Mark In Progress
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -2111,8 +3639,8 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                         {blogs.length === 0 ? (
                           <div className="p-12 text-center text-gray-500 font-semibold">No publications written yet.</div>
                         ) : (
-                          blogs.map(post => (
-                            <div key={post.id} className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors">
+                          blogs.map((post, idx) => (
+                            <div key={post._id || `${post.id || 'blog'}-${idx}`} className="p-4 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors">
                               <div className="flex items-center gap-3">
                                 <div className="w-14 h-14 rounded-lg bg-gray-100 border shrink-0 overflow-hidden relative">
                                   <img src={post.imageUrl || 'https://picsum.photos/seed/skin/150/150'} alt="thumbnail" className="w-full h-full object-cover" />
@@ -2451,399 +3979,1533 @@ export default function DoctorDashboard({ onLogout }: DoctorDashboardProps) {
                 </div>
               )}
 
-              {/* DYNAMIC CMS HOMEPAGE EDITOR */}
+              {/* DYNAMIC GLOBAL SETTINGS & WEBSITE CONTENT CMS */}
               {tab === 'cms' && (
                 <div className="space-y-6">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-gray-200 pb-4">
+                  {/* Top Header Row */}
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-gray-200 pb-4">
                     <div>
-                      <h2 className="font-playfair text-2xl font-black text-gray-900">Dynamic Homepage CMS Blocks</h2>
-                      <p className="text-xs text-gray-500 font-semibold mt-0.5">Instantly modify hero text, banner alerts, about details, and patient testimonials.</p>
+                      <h2 className="font-playfair text-2.5xl font-black text-gray-900 flex items-center gap-2">
+                        <Settings className="w-6 h-6 text-emerald-600" /> Global Settings & Website Content
+                      </h2>
+                      <p className="text-xs text-gray-500 font-semibold mt-0.5">
+                        Edit all user-facing website text, prices, doctor profile details, before/after photos, video links, certificates, reviews, and contact info in one place.
+                      </p>
                     </div>
                     {cms && (
                       <button
                         type="button"
                         disabled={loading}
                         onClick={() => saveCms(cms)}
-                        className="px-5 py-2.5 bg-gradient-to-r from-primary to-accent hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-sm transition-all outline-none cursor-pointer shrink-0"
+                        className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:brightness-105 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs uppercase tracking-wider shadow-md transition-all outline-none cursor-pointer shrink-0"
                       >
-                        <Save className="w-4 h-4" />
-                        Save CMS Configuration
+                        <Save className="w-4 h-4 text-emerald-200" />
+                        {loading ? 'Saving Changes...' : 'Save All Changes'}
                       </button>
                     )}
                   </div>
 
-                  {cms && (
-                    <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+                  {/* 8 Sub-Tab Navigation Pill Bar */}
+                  <div className="flex items-center gap-1.5 p-1.5 bg-gray-200/80 rounded-2xl overflow-x-auto no-scrollbar shadow-inner">
+                    {[
+                      { id: 'hero' as const, label: 'Hero & Banner', icon: '🎨' },
+                      { id: 'about' as const, label: 'Doctor & About', icon: '👨‍⚕️' },
+                      { id: 'services' as const, label: 'Services & Fees', icon: '🩺' },
+                      { id: 'before-after' as const, label: 'Before & After', icon: '📸' },
+                      { id: 'videos' as const, label: 'Videos & Reels', icon: '📹' },
+                      { id: 'certificates' as const, label: 'Certificates', icon: '🎓' },
+                      { id: 'faqs' as const, label: 'Reviews & FAQs', icon: '⭐' },
+                      { id: 'contact' as const, label: 'Contact & Footer', icon: '📞' },
+                    ].map((sub) => (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => setCmsTab(sub.id)}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+                          cmsTab === sub.id
+                            ? 'bg-emerald-600 text-white shadow-md font-black scale-105'
+                            : 'text-gray-700 hover:bg-white/80 hover:text-gray-900'
+                        }`}
+                      >
+                        <span className="text-sm">{sub.icon}</span>
+                        <span>{sub.label}</span>
+                      </button>
+                    ))}
+                  </div>
 
-
-
-
-
-                      {/* Card 3.5: Treatments & Clinical Services CRUD Segment */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                        <div className="flex items-center justify-between border-b pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-                              <Briefcase className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Clinical Services & Treatments</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Manage all dynamic treatments displayed on the website</p>
-                            </div>
-                          </div>
-
-                          {serviceFormMode === 'list' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setServiceForm({ name: '', description: '', price: '' });
-                                setServiceFormMode('create');
-                              }}
-                              className="py-2 px-3.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              Add New Treatment
-                            </button>
-                          )}
-                        </div>
-
-                        {serviceFormMode === 'list' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {cms.services && cms.services.length > 0 ? (
-                              cms.services.map((serv, idx) => (
-                                <div key={serv.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 flex items-start justify-between gap-3 hover:bg-white transition-all shadow-2xs">
-                                  <div className="space-y-0.5 text-left">
-                                    <p className="text-xs font-black text-gray-900 leading-tight">{serv.name}</p>
-                                    <p className="text-[10px] font-bold text-teal-600">{formatPrice(serv.price)}</p>
-                                    <p className="text-[10px] text-gray-500 font-semibold line-clamp-2 leading-relaxed">{serv.description}</p>
-                                  </div>
-                                  <div className="flex flex-col gap-1 shrink-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setServiceForm({
-                                          name: serv.name,
-                                          description: serv.description,
-                                          price: serv.price,
-                                        });
-                                        setActiveServiceIdx(idx);
-                                        setServiceFormMode('edit');
-                                      }}
-                                      className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                                      title="Edit Treatment"
-                                    >
-                                      <Edit className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteService(idx)}
-                                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                      title="Delete Treatment"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
+                  {!cms ? (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-10 text-center space-y-3 shadow-2xs animate-pulse">
+                      <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mx-auto" />
+                      <p className="text-xs font-bold text-gray-700">Loading homepage CMS blocks & content...</p>
+                      <p className="text-[10px] text-gray-400 font-medium">Fetching website CMS data from server...</p>
+                    </div>
+                  ) : (
+                    <form onSubmit={(e) => e.preventDefault()} className="space-y-6 text-left">
+                      {/* SUB-TAB 1: HERO & BANNER */}
+                      {cmsTab === 'hero' && (
+                        <div className="space-y-6">
+                          {/* Announcement Banner Alert */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                                  <Sparkles className="w-5 h-5" />
                                 </div>
-                              ))
-                            ) : (
-                              <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No treatments defined yet.</p>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="p-4 border border-teal-150 rounded-2xl bg-teal-50/15 space-y-4 text-left">
-                            <h4 className="font-playfair font-bold text-xs text-teal-800 uppercase tracking-widest">
-                              {serviceFormMode === 'create' ? 'Create New Treatment' : 'Edit Treatment Details'}
-                            </h4>
+                                <div>
+                                  <h3 className="font-playfair font-bold text-base text-gray-900">Top Banner Announcement Alert</h3>
+                                  <p className="text-[10px] text-gray-500 font-semibold">Displays ticker banner at top of website</p>
+                                </div>
+                              </div>
+                              <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
+                                <span className="text-xs font-bold text-gray-700">Enable Banner</span>
+                                <input
+                                  type="checkbox"
+                                  checked={cms.bannerEnabled}
+                                  onChange={(e) => setCms({ ...cms, bannerEnabled: e.target.checked })}
+                                  className="w-4 h-4 accent-primary rounded"
+                                />
+                              </label>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="flex flex-col">
-                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Treatment Name</label>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Announcement Text</label>
                                 <input
                                   type="text"
-                                  placeholder="e.g. Acne & Scar Treatment"
-                                  value={serviceForm.name}
-                                  onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
-                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-teal-500"
+                                  value={cms.bannerText}
+                                  onChange={(e) => setCms({ ...cms, bannerText: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
                                 />
                               </div>
                               <div className="flex flex-col">
-                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Price Indicator / Fee</label>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Banner Redirect Link</label>
                                 <input
                                   type="text"
-                                  placeholder="e.g. From ₹800/session"
-                                  value={serviceForm.price}
-                                  onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
-                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-teal-500"
+                                  value={cms.bannerLink}
+                                  onChange={(e) => setCms({ ...cms, bannerLink: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-primary"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Hero Headlines & Subtitle */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Homepage Hero Text & Headlines</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Primary hero section title lines and introduction paragraph</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Headline Line 1 (Green/Accent)</label>
+                                <input
+                                  type="text"
+                                  value={cms.heroTitleLine1}
+                                  onChange={(e) => setCms({ ...cms, heroTitleLine1: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Headline Line 2 (Dark Text)</label>
+                                <input
+                                  type="text"
+                                  value={cms.heroTitleLine2}
+                                  onChange={(e) => setCms({ ...cms, heroTitleLine2: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
                                 />
                               </div>
                             </div>
 
                             <div className="flex flex-col">
-                              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Detailed Description</label>
-                              <textarea
-                                rows={3}
-                                placeholder="Describe the treatment benefits, process, sessions, etc."
-                                value={serviceForm.description}
-                                onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
-                                className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-white focus:border-teal-500"
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Subtitle Badge Tagline</label>
+                              <input
+                                type="text"
+                                value={cms.heroSubtitle}
+                                onChange={(e) => setCms({ ...cms, heroSubtitle: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
                               />
                             </div>
 
-                            <div className="flex justify-end gap-2 pt-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setServiceFormMode('list');
-                                  setActiveServiceIdx(null);
-                                }}
-                                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleSaveService}
-                                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
-                              >
-                                <Save className="w-3.5 h-3.5" />
-                                {serviceFormMode === 'create' ? 'Add Treatment' : 'Save Changes'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Card 3.6: Doctor Certificates CRUD Segment */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                        <div className="flex items-center justify-between border-b pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                              <Award className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Doctor Certificates & Credentials</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Manage board certifications and medical degree credentials</p>
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Hero Paragraph Description</label>
+                              <textarea
+                                rows={3}
+                                value={cms.heroDescription}
+                                onChange={(e) => setCms({ ...cms, heroDescription: e.target.value })}
+                                className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                              />
                             </div>
                           </div>
 
-                          {certFormMode === 'list' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCertForm({ title: '', institution: '', image: '' });
-                                setCertFormMode('create');
-                              }}
-                              className="py-2 px-3.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              Add New Certificate
-                            </button>
-                          )}
-                        </div>
+                          {/* Hero Trust Badges & Experience Text */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                <Award className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Hero Trust Badges & Counters</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Pill labels and experience metrics shown on hero card</p>
+                              </div>
+                            </div>
 
-                        {certFormMode === 'list' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {cms.certificates && cms.certificates.length > 0 ? (
-                              cms.certificates.map((cert, idx) => (
-                                <div key={cert.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 flex items-start justify-between gap-3 hover:bg-white transition-all shadow-2xs">
-                                  <div className="flex items-start gap-3 text-left">
-                                    <div className="w-14 h-14 bg-gray-100 border rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                      <img src={cert.image} alt={cert.title} className="w-full h-full object-contain" />
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      <p className="text-xs font-black text-gray-900 leading-tight">{cert.title}</p>
-                                      <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">{cert.institution}</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-col gap-1 shrink-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setCertForm({
-                                          title: cert.title,
-                                          institution: cert.institution,
-                                          image: cert.image,
-                                        });
-                                        setActiveCertIdx(idx);
-                                        setCertFormMode('edit');
-                                      }}
-                                      className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                                      title="Edit Certificate"
-                                    >
-                                      <Edit className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteCertificate(idx)}
-                                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                      title="Delete Certificate"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No certificates configured yet. Default certificates will be shown on the public site.</p>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="p-4 border border-indigo-150 rounded-2xl bg-indigo-50/15 space-y-4 text-left">
-                            <h4 className="font-playfair font-bold text-xs text-indigo-800 uppercase tracking-widest">
-                              {certFormMode === 'create' ? 'Add New Certificate' : 'Edit Certificate Details'}
-                            </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="flex flex-col">
-                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Certificate Title</label>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Badge 1 (Top Left)</label>
                                 <input
                                   type="text"
-                                  placeholder="e.g. Board Certified in Dermatology"
-                                  value={certForm.title}
-                                  onChange={(e) => setCertForm({ ...certForm, title: e.target.value })}
-                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                  value={cms.heroBadge1}
+                                  onChange={(e) => setCms({ ...cms, heroBadge1: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
                                 />
                               </div>
                               <div className="flex flex-col">
-                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Issuing Institution</label>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Badge 2 (Top Right)</label>
                                 <input
                                   type="text"
-                                  placeholder="e.g. IADVL"
-                                  value={certForm.institution}
-                                  onChange={(e) => setCertForm({ ...certForm, institution: e.target.value })}
-                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                  value={cms.heroBadge2}
+                                  onChange={(e) => setCms({ ...cms, heroBadge2: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Experience Counter Badge (e.g. 12+ Yrs)</label>
+                                <input
+                                  type="text"
+                                  value={cms.heroExperienceBadge}
+                                  onChange={(e) => setCms({ ...cms, heroExperienceBadge: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Experience Label Text</label>
+                                <input
+                                  type="text"
+                                  value={cms.heroExperienceText}
+                                  onChange={(e) => setCms({ ...cms, heroExperienceText: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
                                 />
                               </div>
                             </div>
+                          </div>
 
-                            <div className="flex flex-col">
-                              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Certificate Image</label>
+                          {/* Hero Clinic/Doctor Image */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
+                                <ImageIcon className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Hero Main Banner Image</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Featured hero photo on homepage right panel</p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col space-y-3">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Image URL or Upload File</label>
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
-                                <div className="sm:col-span-2">
+                                <div className="sm:col-span-2 space-y-2">
                                   <input
                                     type="text"
-                                    placeholder="Image URL or Path (e.g. /assets/cert1.png)"
-                                    value={certForm.image}
-                                    onChange={(e) => setCertForm({ ...certForm, image: e.target.value })}
-                                    className="w-full px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                    value={cms.heroImageUrl}
+                                    onChange={(e) => setCms({ ...cms, heroImageUrl: e.target.value })}
+                                    className="w-full px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-sky-500"
                                   />
-                                  <div className="mt-2.5 p-3 border border-dashed rounded-xl bg-white flex items-center justify-between">
-                                    <span className="text-[9px] text-gray-500 font-bold uppercase">Upload Certificate File</span>
+                                  <div className="p-3 border border-dashed rounded-xl bg-gray-50 flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase">Upload Hero Photo</span>
                                     <input
                                       type="file"
                                       accept="image/*"
-                                      onChange={(e) => handleFileUpload(e, (url) => setCertForm({ ...certForm, image: url }))}
+                                      onChange={(e) => handleFileUpload(e, (url) => setCms({ ...cms, heroImageUrl: url }))}
                                       className="text-xs text-gray-500 cursor-pointer"
                                     />
                                   </div>
                                 </div>
                                 <div className="flex justify-center sm:justify-start">
-                                  {certForm.image ? (
-                                    <div className="relative w-24 h-24 border rounded-xl overflow-hidden bg-gray-50 flex items-center justify-center shadow-inner">
-                                      <img src={certForm.image} alt="Preview" className="max-w-full max-h-full object-contain" />
-                                      <button
-                                        type="button"
-                                        onClick={() => setCertForm({ ...certForm, image: '' })}
-                                        className="absolute top-1 right-1 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center hover:bg-rose-600 shadow-sm transition-colors"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
+                                  {cms.heroImageUrl ? (
+                                    <div className="w-24 h-24 border rounded-xl overflow-hidden bg-gray-50 shadow-inner">
+                                      <img src={cms.heroImageUrl} alt="Hero preview" className="w-full h-full object-cover" />
                                     </div>
                                   ) : (
-                                    <div className="w-24 h-24 border-2 border-dashed rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 font-bold text-[9px] uppercase tracking-wider text-center p-2">
-                                      No Image Uploaded
+                                    <div className="w-24 h-24 border-2 border-dashed rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 font-bold text-[9px] uppercase">
+                                      No Image
                                     </div>
                                   )}
                                 </div>
                               </div>
                             </div>
+                          </div>
+                        </div>
+                      )}
 
-                            <div className="flex justify-end gap-2 pt-2">
+                      {/* SUB-TAB 2: DOCTOR & ABOUT */}
+                      {cmsTab === 'about' && (
+                        <div className="space-y-6">
+                          {/* Doctor Biography & Subtitles */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                                <Users className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Doctor Profile & About Section</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Doctor name, specialty subtitle, and detailed clinical bio</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Doctor Title / Name</label>
+                                <input
+                                  type="text"
+                                  value={cms.aboutTitle}
+                                  onChange={(e) => setCms({ ...cms, aboutTitle: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Specialty / Role Subtitle</label>
+                                <input
+                                  type="text"
+                                  value={cms.aboutSubtitle}
+                                  onChange={(e) => setCms({ ...cms, aboutSubtitle: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Detailed Biography Paragraph</label>
+                              <textarea
+                                rows={4}
+                                value={cms.aboutDescription}
+                                onChange={(e) => setCms({ ...cms, aboutDescription: e.target.value })}
+                                className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-teal-500"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Doctor Portrait Photo */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                                <ImageIcon className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Doctor Official Portrait Photo</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Displayed in the About Dr. Prateek section</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                              <div className="sm:col-span-2 space-y-2">
+                                <input
+                                  type="text"
+                                  value={cms.aboutDoctorImage}
+                                  onChange={(e) => setCms({ ...cms, aboutDoctorImage: e.target.value })}
+                                  className="w-full px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-indigo-500"
+                                />
+                                <div className="p-3 border border-dashed rounded-xl bg-gray-50 flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase">Upload Doctor Photo</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleFileUpload(e, (url) => setCms({ ...cms, aboutDoctorImage: url }))}
+                                    className="text-xs text-gray-500 cursor-pointer"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-center sm:justify-start">
+                                {cms.aboutDoctorImage ? (
+                                  <div className="w-24 h-24 border rounded-xl overflow-hidden bg-gray-50 shadow-inner">
+                                    <img src={cms.aboutDoctorImage} alt="Doctor portrait" className="w-full h-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div className="w-24 h-24 border-2 border-dashed rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 font-bold text-[9px] uppercase">
+                                    No Image
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Stats Counters */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                <Award className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">About Clinical Statistics (4 Slots)</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Key achievement numbers shown below doctor bio</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {(cms.aboutStats || []).map((st, sIdx) => (
+                                <div key={sIdx} className="p-3 border border-gray-200 rounded-xl bg-gray-50/50 flex gap-2">
+                                  <div className="flex-1 space-y-1">
+                                    <span className="text-[9px] font-black uppercase text-gray-500">Stat {sIdx + 1} Value</span>
+                                    <input
+                                      type="text"
+                                      value={st.value}
+                                      onChange={(e) => {
+                                        const newStats = [...cms.aboutStats];
+                                        newStats[sIdx] = { ...newStats[sIdx], value: e.target.value };
+                                        setCms({ ...cms, aboutStats: newStats });
+                                      }}
+                                      className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold bg-white focus:border-emerald-500 outline-none"
+                                    />
+                                  </div>
+                                  <div className="flex-1 space-y-1">
+                                    <span className="text-[9px] font-black uppercase text-gray-500">Label</span>
+                                    <input
+                                      type="text"
+                                      value={st.label}
+                                      onChange={(e) => {
+                                        const newStats = [...cms.aboutStats];
+                                        newStats[sIdx] = { ...newStats[sIdx], label: e.target.value };
+                                        setCms({ ...cms, aboutStats: newStats });
+                                      }}
+                                      className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold bg-white focus:border-emerald-500 outline-none"
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Doctor Qualifications & Degrees */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                                  <Award className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h3 className="font-playfair font-bold text-base text-gray-900">Doctor Degrees & Qualifications</h3>
+                                  <p className="text-[10px] text-gray-500 font-semibold">Bullet qualifications list shown on website</p>
+                                </div>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setCertFormMode('list');
-                                  setActiveCertIdx(null);
+                                  const deg = prompt('Enter Qualification / Degree title:');
+                                  if (deg) {
+                                    setCms({ ...cms, aboutCredentials: [...(cms.aboutCredentials || []), deg] });
+                                  }
                                 }}
-                                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
+                                className="py-2 px-3 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1"
                               >
-                                Cancel
+                                <Plus className="w-3.5 h-3.5" />
+                                Add Degree
                               </button>
+                            </div>
+
+                            <div className="space-y-2">
+                              {(cms.aboutCredentials || []).map((cred, cIdx) => (
+                                <div key={cIdx} className="flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-gray-50/60 hover:bg-white transition-all">
+                                  <span className="text-xs font-bold text-gray-800">🎓 {cred}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = cms.aboutCredentials.filter((_, i) => i !== cIdx);
+                                      setCms({ ...cms, aboutCredentials: updated });
+                                    }}
+                                    className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SUB-TAB 3: SERVICES & FEES */}
+                      {cmsTab === 'services' && (
+                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                          <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                                <Briefcase className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Clinical Services & Treatments Manager</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Manage all dynamic treatments, fees, and descriptions on user site</p>
+                              </div>
+                            </div>
+
+                            {serviceFormMode === 'list' && (
                               <button
                                 type="button"
-                                onClick={handleSaveCertificate}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                                onClick={() => {
+                                  setServiceForm({ name: '', description: '', price: '' });
+                                  setServiceFormMode('create');
+                                }}
+                                className="py-2 px-3.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
                               >
-                                <Save className="w-3.5 h-3.5" />
-                                {certFormMode === 'create' ? 'Add Certificate' : 'Save Changes'}
+                                <Plus className="w-3.5 h-3.5" />
+                                Add New Treatment
                               </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Card 4: Patient Testimonials Segment */}
-                      <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
-                        <div className="flex items-center justify-between border-b pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                              <Users className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-playfair font-bold text-base text-gray-900">Patient Testimonials & Reviews</h3>
-                              <p className="text-[10px] text-gray-500 font-semibold">Featured clinical feedback on homepage</p>
-                            </div>
+                            )}
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const name = prompt('Patient Name:');
-                              const role = prompt('Treatment type:');
-                              const text = prompt('Testimonial Text:');
-                              if (name && text) {
-                                setCms({
-                                  ...cms,
-                                  testimonials: [...cms.testimonials, { name, role: role || 'Patient', text, rating: 5 }]
-                                });
-                              }
-                            }}
-                            className="py-2 px-3.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add Review Card
-                          </button>
-                        </div>
+                          {serviceFormMode === 'list' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {cms.services && cms.services.length > 0 ? (
+                                cms.services.map((serv, idx) => (
+                                  <div key={serv.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 flex items-start justify-between gap-3 hover:bg-white transition-all shadow-2xs">
+                                    <div className="space-y-0.5 text-left">
+                                      <p className="text-xs font-black text-gray-900 leading-tight">{serv.name}</p>
+                                      <p className="text-[10px] font-bold text-teal-600">{formatPrice(serv.price)}</p>
+                                      <p className="text-[10px] text-gray-500 font-semibold line-clamp-2 leading-relaxed">{serv.description}</p>
+                                    </div>
+                                    <div className="flex flex-col gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setServiceForm({
+                                            name: serv.name,
+                                            description: serv.description,
+                                            price: serv.price,
+                                          });
+                                          setActiveServiceIdx(idx);
+                                          setServiceFormMode('edit');
+                                        }}
+                                        className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Edit Treatment"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteService(idx)}
+                                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Delete Treatment"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No treatments defined yet.</p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-4 border border-teal-150 rounded-2xl bg-teal-50/15 space-y-4 text-left">
+                              <h4 className="font-playfair font-bold text-xs text-teal-800 uppercase tracking-widest">
+                                {serviceFormMode === 'create' ? 'Create New Treatment' : 'Edit Treatment Details'}
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Treatment Name</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Acne & Scar Treatment"
+                                    value={serviceForm.name}
+                                    onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-teal-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Price Indicator / Fee</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. From ₹800/session"
+                                    value={serviceForm.price}
+                                    onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-teal-500"
+                                  />
+                                </div>
+                              </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {cms.testimonials.map((test, idx) => (
-                            <div key={idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 space-y-2 relative hover:bg-white transition-all shadow-2xs">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-black text-gray-900">{test.name} • <span className="text-teal-700 font-semibold">{test.role}</span></span>
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Detailed Description</label>
+                                <textarea
+                                  rows={3}
+                                  placeholder="Describe the treatment benefits, process, sessions, etc."
+                                  value={serviceForm.description}
+                                  onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
+                                  className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-white focus:border-teal-500"
+                                />
+                              </div>
+
+                              <div className="flex justify-end gap-2 pt-2">
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const list = cms.testimonials.filter((_, i) => i !== idx);
-                                    setCms({ ...cms, testimonials: list });
+                                    setServiceFormMode('list');
+                                    setActiveServiceIdx(null);
                                   }}
-                                  className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Delete Testimonial"
+                                  className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveService}
+                                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  {serviceFormMode === 'create' ? 'Add Treatment' : 'Save Changes'}
                                 </button>
                               </div>
-                              <p className="text-[11px] text-gray-600 font-semibold italic leading-relaxed">&ldquo;{test.text}&rdquo;</p>
                             </div>
-                          ))}
+                          )}
                         </div>
-                      </div>
+                      )}
 
+                      {/* SUB-TAB 4: BEFORE & AFTER */}
+                      {cmsTab === 'before-after' && (
+                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                          <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center font-bold">
+                                <ImageIcon className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Before & After Clinical Transformations</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Manage real patient result comparison photos on homepage</p>
+                              </div>
+                            </div>
+
+                            {baFormMode === 'list' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBaForm({ treatment: '', duration: '', sessions: '', tag: '', beforeSrc: '', afterSrc: '' });
+                                  setBaFormMode('create');
+                                }}
+                                className="py-2 px-3.5 bg-pink-50 text-pink-700 hover:bg-pink-100 border border-pink-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Add Transformation Case
+                              </button>
+                            )}
+                          </div>
+
+                          {baFormMode === 'list' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {(cms.beforeAfterCases || []).length > 0 ? (
+                                cms.beforeAfterCases!.map((item, idx) => (
+                                  <div key={item.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 space-y-3 hover:bg-white transition-all shadow-2xs">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-pink-100 text-pink-800">{item.tag}</span>
+                                        <h4 className="text-xs font-black text-gray-900 mt-1">{item.treatment}</h4>
+                                        <p className="text-[10px] text-gray-500 font-semibold">{item.duration} • {item.sessions}</p>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setBaForm({
+                                              treatment: item.treatment,
+                                              duration: item.duration,
+                                              sessions: item.sessions,
+                                              tag: item.tag,
+                                              beforeSrc: item.beforeSrc,
+                                              afterSrc: item.afterSrc,
+                                            });
+                                            setActiveBaIdx(idx);
+                                            setBaFormMode('edit');
+                                          }}
+                                          className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"
+                                        >
+                                          <Edit className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteBeforeAfter(idx)}
+                                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                      <div className="relative h-24 rounded-lg overflow-hidden border bg-gray-100">
+                                        <img src={item.beforeSrc} alt="Before" className="w-full h-full object-cover" />
+                                        <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">BEFORE</span>
+                                      </div>
+                                      <div className="relative h-24 rounded-lg overflow-hidden border bg-gray-100">
+                                        <img src={item.afterSrc} alt="After" className="w-full h-full object-cover" />
+                                        <span className="absolute bottom-1 right-1 bg-emerald-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">AFTER</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No transformation cases added yet.</p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-4 border border-pink-150 rounded-2xl bg-pink-50/15 space-y-4 text-left">
+                              <h4 className="font-playfair font-bold text-xs text-pink-800 uppercase tracking-widest">
+                                {baFormMode === 'create' ? 'Add Transformation Case' : 'Edit Transformation Case'}
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Treatment Name</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Severe Acne Scar Resurfacing"
+                                    value={baForm.treatment}
+                                    onChange={(e) => setBaForm({ ...baForm, treatment: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-pink-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Category Tag</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Acne Care"
+                                    value={baForm.tag}
+                                    onChange={(e) => setBaForm({ ...baForm, tag: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-pink-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Time Duration</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. 6 Weeks"
+                                    value={baForm.duration}
+                                    onChange={(e) => setBaForm({ ...baForm, duration: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-pink-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Number of Sessions</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. 4 Sessions"
+                                    value={baForm.sessions}
+                                    onChange={(e) => setBaForm({ ...baForm, sessions: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-pink-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                                {/* Before Photo Upload */}
+                                <div className="space-y-2">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Before Image Photo</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Image URL"
+                                    value={baForm.beforeSrc}
+                                    onChange={(e) => setBaForm({ ...baForm, beforeSrc: e.target.value })}
+                                    className="w-full px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-pink-500"
+                                  />
+                                  <div className="p-2.5 border border-dashed rounded-xl bg-white flex items-center justify-between">
+                                    <span className="text-[9px] text-gray-500 font-bold uppercase">Upload Before Photo</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(e) => handleFileUpload(e, (url) => setBaForm({ ...baForm, beforeSrc: url }))}
+                                      className="text-xs text-gray-500 cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* After Photo Upload */}
+                                <div className="space-y-2">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">After Image Photo</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Image URL"
+                                    value={baForm.afterSrc}
+                                    onChange={(e) => setBaForm({ ...baForm, afterSrc: e.target.value })}
+                                    className="w-full px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-pink-500"
+                                  />
+                                  <div className="p-2.5 border border-dashed rounded-xl bg-white flex items-center justify-between">
+                                    <span className="text-[9px] text-gray-500 font-bold uppercase">Upload After Photo</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(e) => handleFileUpload(e, (url) => setBaForm({ ...baForm, afterSrc: url }))}
+                                      className="text-xs text-gray-500 cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex justify-end gap-2 pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBaFormMode('list');
+                                    setActiveBaIdx(null);
+                                  }}
+                                  className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveBeforeAfter}
+                                  className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  {baFormMode === 'create' ? 'Add Case' : 'Save Changes'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SUB-TAB 5: VIDEOS & REELS */}
+                      {cmsTab === 'videos' && (
+                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                          <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
+                                <Video className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Videos & Educational Reels</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Embed YouTube/Vimeo tutorials and clinical procedure reels</p>
+                              </div>
+                            </div>
+
+                            {videoFormMode === 'list' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setVideoForm({ title: '', desc: '', duration: '', videoUrl: '', thumbnail: '' });
+                                  setVideoFormMode('create');
+                                }}
+                                className="py-2 px-3.5 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Add Video
+                              </button>
+                            )}
+                          </div>
+
+                          {videoFormMode === 'list' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {(cms.videos || []).length > 0 ? (
+                                cms.videos!.map((vid, idx) => (
+                                  <div key={vid.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 flex items-start gap-3 hover:bg-white transition-all shadow-2xs">
+                                    <div className="w-20 h-16 rounded-xl bg-gray-200 border overflow-hidden shrink-0 relative">
+                                      <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" />
+                                      <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[8px] font-bold px-1 rounded">{vid.duration}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0 space-y-0.5">
+                                      <p className="text-xs font-black text-gray-900 truncate">{vid.title}</p>
+                                      <p className="text-[10px] text-gray-500 line-clamp-1">{vid.desc}</p>
+                                      <p className="text-[9px] font-mono text-red-600 truncate">{vid.videoUrl}</p>
+                                    </div>
+                                    <div className="flex flex-col gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setVideoForm({
+                                            title: vid.title,
+                                            desc: vid.desc,
+                                            duration: vid.duration,
+                                            videoUrl: vid.videoUrl,
+                                            thumbnail: vid.thumbnail,
+                                          });
+                                          setActiveVideoIdx(idx);
+                                          setVideoFormMode('edit');
+                                        }}
+                                        className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteVideo(idx)}
+                                        className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No video tutorials configured.</p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-4 border border-red-150 rounded-2xl bg-red-50/15 space-y-4 text-left">
+                              <h4 className="font-playfair font-bold text-xs text-red-800 uppercase tracking-widest">
+                                {videoFormMode === 'create' ? 'Add New Video' : 'Edit Video Details'}
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Video Title</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Post-Procedure Laser Care Tips"
+                                    value={videoForm.title}
+                                    onChange={(e) => setVideoForm({ ...videoForm, title: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-red-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Video Duration</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. 4:15"
+                                    value={videoForm.duration}
+                                    onChange={(e) => setVideoForm({ ...videoForm, duration: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-red-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">YouTube / Video Embed URL</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. https://www.youtube.com/embed/dQw4w9WgXcQ"
+                                  value={videoForm.videoUrl}
+                                  onChange={(e) => setVideoForm({ ...videoForm, videoUrl: e.target.value })}
+                                  className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-red-500 font-mono"
+                                />
+                              </div>
+
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Short Video Summary</label>
+                                <textarea
+                                  rows={2}
+                                  placeholder="Brief explanation of video content"
+                                  value={videoForm.desc}
+                                  onChange={(e) => setVideoForm({ ...videoForm, desc: e.target.value })}
+                                  className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-white focus:border-red-500"
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Custom Thumbnail Image</label>
+                                <input
+                                  type="text"
+                                  placeholder="Thumbnail Image URL"
+                                  value={videoForm.thumbnail}
+                                  onChange={(e) => setVideoForm({ ...videoForm, thumbnail: e.target.value })}
+                                  className="w-full px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-red-500"
+                                />
+                                <div className="p-2.5 border border-dashed rounded-xl bg-white flex items-center justify-between">
+                                  <span className="text-[9px] text-gray-500 font-bold uppercase">Upload Custom Cover Thumbnail</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => handleFileUpload(e, (url) => setVideoForm({ ...videoForm, thumbnail: url }))}
+                                    className="text-xs text-gray-500 cursor-pointer"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex justify-end gap-2 pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setVideoFormMode('list');
+                                    setActiveVideoIdx(null);
+                                  }}
+                                  className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveVideo}
+                                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  {videoFormMode === 'create' ? 'Add Video' : 'Save Changes'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SUB-TAB 6: CERTIFICATES */}
+                      {cmsTab === 'certificates' && (
+                        <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                          <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                                <Award className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Doctor Certificates & Credentials</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Manage board certifications and medical degree credentials</p>
+                              </div>
+                            </div>
+
+                            {certFormMode === 'list' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCertForm({ title: '', institution: '', image: '' });
+                                  setCertFormMode('create');
+                                }}
+                                className="py-2 px-3.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Add New Certificate
+                              </button>
+                            )}
+                          </div>
+
+                          {certFormMode === 'list' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {cms.certificates && cms.certificates.length > 0 ? (
+                                cms.certificates.map((cert, idx) => (
+                                  <div key={cert.id || idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 flex items-start justify-between gap-3 hover:bg-white transition-all shadow-2xs">
+                                    <div className="flex items-start gap-3 text-left">
+                                      <div className="w-14 h-14 bg-gray-100 border rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                        <img src={cert.image} alt={cert.title} className="w-full h-full object-contain" />
+                                      </div>
+                                      <div className="space-y-0.5">
+                                        <p className="text-xs font-black text-gray-900 leading-tight">{cert.title}</p>
+                                        <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">{cert.institution}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCertForm({
+                                            title: cert.title,
+                                            institution: cert.institution,
+                                            image: cert.image,
+                                          });
+                                          setActiveCertIdx(idx);
+                                          setCertFormMode('edit');
+                                        }}
+                                        className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Edit Certificate"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteCertificate(idx)}
+                                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Delete Certificate"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-gray-500 italic py-4 col-span-2 text-left">No certificates configured yet.</p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-4 border border-indigo-150 rounded-2xl bg-indigo-50/15 space-y-4 text-left">
+                              <h4 className="font-playfair font-bold text-xs text-indigo-800 uppercase tracking-widest">
+                                {certFormMode === 'create' ? 'Add New Certificate' : 'Edit Certificate Details'}
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Certificate Title</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Board Certified in Dermatology"
+                                    value={certForm.title}
+                                    onChange={(e) => setCertForm({ ...certForm, title: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Issuing Institution</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. IADVL"
+                                    value={certForm.institution}
+                                    onChange={(e) => setCertForm({ ...certForm, institution: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Certificate Image</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+                                  <div className="sm:col-span-2 space-y-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Image URL or Path (e.g. /assets/cert1.png)"
+                                      value={certForm.image}
+                                      onChange={(e) => setCertForm({ ...certForm, image: e.target.value })}
+                                      className="w-full px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-indigo-500"
+                                    />
+                                    <div className="p-2.5 border border-dashed rounded-xl bg-white flex items-center justify-between">
+                                      <span className="text-[9px] text-gray-500 font-bold uppercase">Upload Certificate File</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => handleFileUpload(e, (url) => setCertForm({ ...certForm, image: url }))}
+                                        className="text-xs text-gray-500 cursor-pointer"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-center sm:justify-start">
+                                    {certForm.image ? (
+                                      <div className="w-20 h-20 border rounded-xl overflow-hidden bg-gray-50 flex items-center justify-center shadow-inner">
+                                        <img src={certForm.image} alt="Preview" className="max-w-full max-h-full object-contain" />
+                                      </div>
+                                    ) : (
+                                      <div className="w-20 h-20 border-2 border-dashed rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 font-bold text-[9px] uppercase">
+                                        No Image
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex justify-end gap-2 pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCertFormMode('list');
+                                    setActiveCertIdx(null);
+                                  }}
+                                  className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveCertificate}
+                                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  {certFormMode === 'create' ? 'Add Certificate' : 'Save Changes'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SUB-TAB 7: REVIEWS & FAQS */}
+                      {cmsTab === 'faqs' && (
+                        <div className="space-y-6">
+                          {/* Testimonials Segment */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                                  <Users className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h3 className="font-playfair font-bold text-base text-gray-900">Patient Testimonials & Reviews</h3>
+                                  <p className="text-[10px] text-gray-500 font-semibold">Featured patient feedback cards shown on website</p>
+                                </div>
+                              </div>
+
+                              {testimonialFormMode === 'list' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTestimonialForm({ name: '', role: 'Patient', rating: 5, text: '' });
+                                    setTestimonialFormMode('create');
+                                  }}
+                                  className="py-2 px-3.5 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  Add Review Card
+                                </button>
+                              )}
+                            </div>
+
+                            {testimonialFormMode === 'list' ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {(cms.testimonials || []).map((test, idx) => (
+                                  <div key={idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 space-y-2 relative hover:bg-white transition-all shadow-2xs">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-xs font-black text-gray-900">{test.name} • <span className="text-teal-700 font-semibold">{test.role}</span></span>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setTestimonialForm({ name: test.name, role: test.role, rating: test.rating || 5, text: test.text });
+                                            setActiveTestimonialIdx(idx);
+                                            setTestimonialFormMode('edit');
+                                          }}
+                                          className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+                                        >
+                                          <Edit className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteTestimonial(idx)}
+                                          className="p-1 text-rose-500 hover:bg-rose-50 rounded"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="text-[11px] text-gray-600 font-semibold italic leading-relaxed">&ldquo;{test.text}&rdquo;</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-4 border border-amber-150 rounded-2xl bg-amber-50/15 space-y-4 text-left">
+                                <h4 className="font-playfair font-bold text-xs text-amber-800 uppercase tracking-widest">
+                                  {testimonialFormMode === 'create' ? 'Add Review Card' : 'Edit Review Card'}
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="flex flex-col">
+                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Patient Name</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. Ananya Sharma"
+                                      value={testimonialForm.name}
+                                      onChange={(e) => setTestimonialForm({ ...testimonialForm, name: e.target.value })}
+                                      className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-amber-500"
+                                    />
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Treatment / Role</label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. Acne Laser Patient"
+                                      value={testimonialForm.role}
+                                      onChange={(e) => setTestimonialForm({ ...testimonialForm, role: e.target.value })}
+                                      className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-amber-500"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Review Comment</label>
+                                  <textarea
+                                    rows={3}
+                                    placeholder="Patient's testimonial feedback"
+                                    value={testimonialForm.text}
+                                    onChange={(e) => setTestimonialForm({ ...testimonialForm, text: e.target.value })}
+                                    className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-white focus:border-amber-500"
+                                  />
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTestimonialFormMode('list');
+                                      setActiveTestimonialIdx(null);
+                                    }}
+                                    className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveTestimonial}
+                                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                                  >
+                                    <Save className="w-3.5 h-3.5" />
+                                    {testimonialFormMode === 'create' ? 'Add Review' : 'Save Changes'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* FAQs Segment */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                                  <HelpCircle className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h3 className="font-playfair font-bold text-base text-gray-900">Frequently Asked Questions (FAQs)</h3>
+                                  <p className="text-[10px] text-gray-500 font-semibold">Q&A accordion items displayed on public website</p>
+                                </div>
+                              </div>
+
+                              {faqFormMode === 'list' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFaqForm({ question: '', answer: '' });
+                                    setFaqFormMode('create');
+                                  }}
+                                  className="py-2 px-3.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  Add FAQ Item
+                                </button>
+                              )}
+                            </div>
+
+                            {faqFormMode === 'list' ? (
+                              <div className="space-y-3">
+                                {(cms.faqs || []).map((faq, idx) => (
+                                  <div key={idx} className="p-4 border border-gray-200 rounded-2xl bg-gray-50/60 space-y-1.5 relative hover:bg-white transition-all shadow-2xs">
+                                    <div className="flex justify-between items-start gap-2">
+                                      <h4 className="text-xs font-black text-gray-900">Q: {faq.question}</h4>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setFaqForm({ question: faq.question, answer: faq.answer });
+                                            setActiveFaqIdx(idx);
+                                            setFaqFormMode('edit');
+                                          }}
+                                          className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+                                        >
+                                          <Edit className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteFaq(idx)}
+                                          className="p-1 text-rose-500 hover:bg-rose-50 rounded"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="text-[11px] text-gray-600 font-semibold leading-relaxed">A: {faq.answer}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-4 border border-blue-150 rounded-2xl bg-blue-50/15 space-y-4 text-left">
+                                <h4 className="font-playfair font-bold text-xs text-blue-800 uppercase tracking-widest">
+                                  {faqFormMode === 'create' ? 'Add FAQ Item' : 'Edit FAQ Item'}
+                                </h4>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Question</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. How many laser sessions are required for acne scars?"
+                                    value={faqForm.question}
+                                    onChange={(e) => setFaqForm({ ...faqForm, question: e.target.value })}
+                                    className="px-3.5 py-2 border rounded-xl text-xs font-semibold outline-none bg-white focus:border-blue-500"
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Detailed Answer</label>
+                                  <textarea
+                                    rows={3}
+                                    placeholder="Clear clinical answer for patients"
+                                    value={faqForm.answer}
+                                    onChange={(e) => setFaqForm({ ...faqForm, answer: e.target.value })}
+                                    className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-white focus:border-blue-500"
+                                  />
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFaqFormMode('list');
+                                      setActiveFaqIdx(null);
+                                    }}
+                                    className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-bold rounded-xl transition-all cursor-pointer outline-none"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveFaq}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer outline-none flex items-center gap-1.5 shadow-sm"
+                                  >
+                                    <Save className="w-3.5 h-3.5" />
+                                    {faqFormMode === 'create' ? 'Add FAQ' : 'Save Changes'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SUB-TAB 8: CONTACT & FOOTER */}
+                      {cmsTab === 'contact' && (
+                        <div className="space-y-6">
+                          {/* Clinic Address & Contact Information */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                <PhoneCall className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Clinic Address & Communication Channels</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Phone, WhatsApp, email, timings, and map location</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Primary Phone Number</label>
+                                <input
+                                  type="text"
+                                  value={cms.contactPhone}
+                                  onChange={(e) => setCms({ ...cms, contactPhone: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">WhatsApp Contact Number</label>
+                                <input
+                                  type="text"
+                                  value={cms.contactWhatsapp}
+                                  onChange={(e) => setCms({ ...cms, contactWhatsapp: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Official Email Address</label>
+                                <input
+                                  type="text"
+                                  value={cms.contactEmail}
+                                  onChange={(e) => setCms({ ...cms, contactEmail: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">OPD Timings Text</label>
+                                <input
+                                  type="text"
+                                  value={cms.contactTimings}
+                                  onChange={(e) => setCms({ ...cms, contactTimings: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Physical Clinic Address</label>
+                              <input
+                                type="text"
+                                value={cms.contactAddress}
+                                onChange={(e) => setCms({ ...cms, contactAddress: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500"
+                              />
+                            </div>
+
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Google Maps Embed iframe URL</label>
+                              <input
+                                type="text"
+                                value={cms.googleMapsEmbed}
+                                onChange={(e) => setCms({ ...cms, googleMapsEmbed: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-emerald-500 font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Social Media Channels */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                                <Send className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Social Media & Channel Links</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Footer and top bar social handle redirect links</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Instagram URL</label>
+                                <input
+                                  type="text"
+                                  value={cms.instagramUrl}
+                                  onChange={(e) => setCms({ ...cms, instagramUrl: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500 font-mono"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Facebook URL</label>
+                                <input
+                                  type="text"
+                                  value={cms.facebookUrl}
+                                  onChange={(e) => setCms({ ...cms, facebookUrl: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500 font-mono"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">YouTube Channel URL</label>
+                                <input
+                                  type="text"
+                                  value={cms.youtubeUrl}
+                                  onChange={(e) => setCms({ ...cms, youtubeUrl: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500 font-mono"
+                                />
+                              </div>
+                              <div className="flex flex-col">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Twitter / X URL</label>
+                                <input
+                                  type="text"
+                                  value={cms.twitterUrl}
+                                  onChange={(e) => setCms({ ...cms, twitterUrl: e.target.value })}
+                                  className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-purple-500 font-mono"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Footer & Copyright Text */}
+                          <div className="bg-white border border-gray-200/80 rounded-2xl p-6 shadow-xs space-y-4 hover:shadow-md transition-all">
+                            <div className="flex items-center gap-3 border-b pb-3">
+                              <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-playfair font-bold text-base text-gray-900">Website Footer & Copyright Notice</h3>
+                                <p className="text-[10px] text-gray-500 font-semibold">Footer summary sentence and copyright notice</p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Footer Description Paragraph</label>
+                              <textarea
+                                rows={2}
+                                value={cms.footerText}
+                                onChange={(e) => setCms({ ...cms, footerText: e.target.value })}
+                                className="p-3 border rounded-xl text-xs font-semibold resize-none outline-none bg-gray-50/50 focus:bg-white focus:border-slate-500"
+                              />
+                            </div>
+
+                            <div className="flex flex-col">
+                              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Copyright Notice Line</label>
+                              <input
+                                type="text"
+                                value={cms.copyrightText}
+                                onChange={(e) => setCms({ ...cms, copyrightText: e.target.value })}
+                                className="px-4 py-2.5 border rounded-xl text-xs font-semibold outline-none bg-gray-50/50 focus:bg-white focus:border-slate-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bottom Sticky Save Button */}
                       <button
                         type="button"
                         disabled={loading}
                         onClick={() => saveCms(cms)}
-                        className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-primary hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
+                        className="w-full py-4 bg-gradient-to-r from-[#0B1B29] via-[#1B4F72] to-emerald-600 hover:brightness-110 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all outline-none cursor-pointer uppercase text-xs tracking-wider"
                       >
                         <Save className="w-4 h-4 text-emerald-300" />
-                        Save Live CMS Configuration
+                        {loading ? 'Saving Changes...' : 'Save All Changes'}
                       </button>
                     </form>
                   )}

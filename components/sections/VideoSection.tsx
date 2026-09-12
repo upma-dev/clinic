@@ -5,35 +5,39 @@ import Image from 'next/image';
 import { Play, Sparkles, Instagram } from 'lucide-react';
 import { siteConfig } from '@/config/site';
 
-export default function VideoSection() {
+import type { CMSContent } from '@/lib/types';
+
+export default function VideoSection({ cms }: { cms?: CMSContent | null }) {
   const [activeVideo, setActiveVideo] = useState<string | null>(null);
 
-  const videoTutorials = [
-    {
-      id: 'prp-tutorial',
-      title: 'How PRP Hair Therapy is Conducted',
-      desc: 'Inside our specialized clinic: Step-by-step preparation, blood centrifugation, and nutrient growth factor micro-deliveries.',
-      duration: '3 mins walkthrough',
-      videoUrl: '/assets/dummy_video.mp4',
-      thumbnail: '/assets/placeholder2.jpeg',
-    },
-    {
-      id: 'acne-peel-tutorial',
-      title: 'Chemical Peels vs Melasma Care',
-      desc: 'Dr. Prateek Tiwari explaining salicylic & glycolic peeling controls. Witness skin-cell turnover for radiant health.',
-      duration: '4 mins clinical talk',
-      videoUrl: '/assets/Video2.mp4',
-      thumbnail: '/assets/placeholder1.jpeg',
-    },
-  ];
+  const videoTutorials = cms?.videos?.length
+    ? cms.videos
+    : [
+        {
+          id: 'prp-tutorial',
+          title: 'How PRP Hair Therapy is Conducted',
+          desc: 'Inside our specialized clinic: Step-by-step preparation, blood centrifugation, and nutrient growth factor micro-deliveries.',
+          duration: '3 mins walkthrough',
+          videoUrl: '/assets/dummy_video.mp4',
+          thumbnail: '/assets/placeholder2.jpeg',
+        },
+        {
+          id: 'acne-peel-tutorial',
+          title: 'Chemical Peels vs Melasma Care',
+          desc: 'Dr. Prateek Tiwari explaining salicylic & glycolic peeling controls. Witness skin-cell turnover for radiant health.',
+          duration: '4 mins clinical talk',
+          videoUrl: '/assets/Video2.mp4',
+          thumbnail: '/assets/placeholder1.jpeg',
+        },
+      ];
 
   return (
     <section
       id="video-section"
-      className="border-t border-gray-200 bg-[#F9F9FB] py-16 sm:py-20"
+      className="border-t border-gray-200 bg-[#F9F9FB] py-6 sm:py-12"
     >
       <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-        <div className="mb-12">
+        <div className="mb-6 sm:mb-10">
           <span className="mb-3 inline-flex items-center rounded-full bg-primary/10 px-3 py-1 font-sans text-xs font-bold uppercase tracking-wider text-primary">
             <Sparkles className="mr-1 h-3.5 w-3.5" />
             Media & Walkthroughs

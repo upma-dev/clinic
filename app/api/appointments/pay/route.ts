@@ -112,17 +112,16 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-      // Mock flow if keys are not set yet
-      return NextResponse.json({
-        isMock: true,
-        orderId: `mock_order_${Date.now()}`,
-        amount: fee * 100,
-        currency: 'INR',
-        keyId: 'mock_key',
-      });
-    }
+    // Razorpay Integration commented out - Defaulting to QR payment flow
+    return NextResponse.json({
+      isMock: true,
+      orderId: `qr_order_${Date.now()}`,
+      amount: fee * 100,
+      currency: 'INR',
+      keyId: 'mock_key',
+    });
 
+    /* 
     const orderPayload = {
       amount: fee * 100, // in paise
       currency: 'INR',
@@ -167,8 +166,9 @@ export async function POST(req: Request) {
       currency: order.currency,
       keyId: RAZORPAY_KEY_ID,
     });
+    */
   } catch (error) {
-    console.error('Error creating razorpay order:', error);
+    console.error('Error creating payment order:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -59,10 +59,10 @@ export default function Services({ cms, isAllPage = false }: ServicesProps) {
   const visibleServices = isAllPage ? servicesList : servicesList.slice(currentPage * 4, (currentPage * 4) + 4);
 
   return (
-    <section id="services" className="py-12 sm:py-16 bg-surface">
+    <section id="services" className="py-6 sm:py-12 bg-surface">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
 
-        <div className="mb-14">
+        <div className="mb-6 sm:mb-10">
           <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-3">
             <Sparkles className="w-3.5 h-3.5 mr-1" />
             Clinical Excellence

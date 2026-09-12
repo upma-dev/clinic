@@ -1,5 +1,9 @@
 import { getDb, COLLECTIONS } from '../mongodb';
 import type { ClinicSettings } from '../types';
+import { cache } from '../cache';
+
+const SETTINGS_CACHE_KEY = 'public:clinic_settings';
+const CACHE_TTL_SECONDS = 600; // 10 minutes
 
 const DEFAULT_SETTINGS: ClinicSettings = {
   clinicName: "Dr. Prateek Tiwari's Skin Hub Derma, Hair & Laser Clinic",
@@ -7,8 +11,8 @@ const DEFAULT_SETTINGS: ClinicSettings = {
   clinicAddress: 'B-23, Bada Shopping Complex, Opposite Water Tank, Rishi Nagar, Ujjain, Madhya Pradesh 456010',
   clinicPhone: '+91 98270 42111',
   clinicEmail: 'contact@skinhubujjain.com',
-  morningStart: '09:00',
-  morningEnd: '14:00',
+  morningStart: '11:00',
+  morningEnd: '15:00',
   eveningStart: '17:00',
   eveningEnd: '21:00',
   availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
@@ -16,8 +20,10 @@ const DEFAULT_SETTINGS: ClinicSettings = {
   consultationFee: 200,
   onlineConsultationFee: 500,
   offlineConsultationFee: 200,
+  onlinePreBookingFee: 500,
+  offlinePreBookingFee: 50,
   emergencyFee: 1000,
-  slotDurationMinutes: 15,
+  slotDurationMinutes: 3,
   reminderTimeMinutes: 60,
   emailTemplates: {
     booked: 'Dear {name}, your appointment booking request for {date} at {time} has been registered. Reference: {id}.',
@@ -33,9 +39,10 @@ const DEFAULT_SETTINGS: ClinicSettings = {
   },
   bookingCutoffHour: 19,
   bookingCutoffMinute: 30,
+  advanceBookingDays: 7,
   blockedSlots: [],
   
-  // Online booking specific
+  // Online & Offline booking specific controls
   onlineDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
   onlineStart: '10:00',
   onlineEnd: '18:00',
@@ -43,23 +50,34 @@ const DEFAULT_SETTINGS: ClinicSettings = {
   bookingBufferHours: 2,
   onlineHolidayExceptions: [],
   onlinePaymentMandatory: false,
+  offlinePaymentMandatory: false,
+  onlinePaymentTiming: 'pre_booking',
+  offlinePaymentTiming: 'after_booking',
   onlineRequiresApproval: false,
+  autoReserveHourlyBufferSlots: true,
+  hourlyBufferCount: 3,
 };
 
 export async function getClinicSettings(): Promise<ClinicSettings> {
-  try {
-    const db = await getDb();
-    const doc = await db.collection<ClinicSettings>(COLLECTIONS.settings).findOne({});
-    if (!doc) {
-      const { _id: _unused, ...defaults } = DEFAULT_SETTINGS;
-      await db.collection(COLLECTIONS.settings).insertOne(defaults);
-      return DEFAULT_SETTINGS;
-    }
-    const { _id, ...rest } = doc;
-    return { ...DEFAULT_SETTINGS, ...rest };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  return cache.getOrSet(
+    SETTINGS_CACHE_KEY,
+    async () => {
+      try {
+        const db = await getDb();
+        const doc = await db.collection<ClinicSettings>(COLLECTIONS.settings).findOne({});
+        if (!doc) {
+          const { _id: _unused, ...defaults } = DEFAULT_SETTINGS;
+          await db.collection(COLLECTIONS.settings).insertOne(defaults);
+          return DEFAULT_SETTINGS;
+        }
+        const { _id, ...rest } = doc;
+        return { ...DEFAULT_SETTINGS, ...rest };
+      } catch {
+        return DEFAULT_SETTINGS;
+      }
+    },
+    CACHE_TTL_SECONDS
+  );
 }
 
 export async function updateClinicSettings(
@@ -71,5 +89,7 @@ export async function updateClinicSettings(
     { $set: patch },
     { upsert: true }
   );
+  // Invalidate cache immediately on update
+  cache.delete(SETTINGS_CACHE_KEY);
   return getClinicSettings();
 }

@@ -1,5 +1,9 @@
 import { getDb, COLLECTIONS } from '../mongodb';
 import type { CMSContent } from '../types';
+import { cache } from '../cache';
+
+const CMS_CACHE_KEY = 'public:cms_settings';
+const CACHE_TTL_SECONDS = 600; // 10 minutes
 
 const DEFAULT_CMS: CMSContent = {
   bannerText: "Best Dermatologist in Ujjain — Book online to skip the queue",
@@ -98,6 +102,55 @@ const DEFAULT_CMS: CMSContent = {
     }
   ],
 
+  beforeAfterCases: [
+    {
+      id: "ba1",
+      treatment: "Acne & Scar Treatment",
+      duration: "6 Weeks",
+      sessions: "4 Sessions",
+      tag: "Most Popular",
+      beforeSrc: "/assets/before1.jpeg",
+      afterSrc: "/assets/after1.jpeg"
+    },
+    {
+      id: "ba2",
+      treatment: "PRP Hair Therapy",
+      duration: "3 Months",
+      sessions: "6 Sessions",
+      tag: "Hair Loss",
+      beforeSrc: "/assets/before1.jpeg",
+      afterSrc: "/assets/after1.jpeg"
+    },
+    {
+      id: "ba3",
+      treatment: "Skin Brightening & Yellow Peel",
+      duration: "4 Weeks",
+      sessions: "3 Sessions",
+      tag: "Pigmentation",
+      beforeSrc: "/assets/before1.jpeg",
+      afterSrc: "/assets/after1.jpeg"
+    }
+  ],
+
+  videos: [
+    {
+      id: "v1",
+      title: "How PRP Hair Therapy is Conducted",
+      desc: "Inside our specialized clinic: Step-by-step preparation, blood centrifugation, and nutrient growth factor micro-deliveries.",
+      duration: "3 mins walkthrough",
+      videoUrl: "/assets/dummy_video.mp4",
+      thumbnail: "/assets/placeholder2.jpeg"
+    },
+    {
+      id: "v2",
+      title: "Chemical Peels vs Melasma Care",
+      desc: "Dr. Prateek Tiwari explaining salicylic & glycolic peeling controls. Witness skin-cell turnover for radiant health.",
+      duration: "4 mins clinical talk",
+      videoUrl: "/assets/Video2.mp4",
+      thumbnail: "/assets/placeholder1.jpeg"
+    }
+  ],
+
   contactAddress: "Skin Hub & Physio Centre, Rishi Nagar, Ujjain, Madhya Pradesh 456010",
   contactPhone: "+91 98270 42111",
   contactWhatsapp: "919827042111",
@@ -120,19 +173,25 @@ const DEFAULT_CMS: CMSContent = {
 };
 
 export async function getCmsSettings(): Promise<CMSContent> {
-  try {
-    const db = await getDb();
-    const doc = await db.collection<CMSContent>(COLLECTIONS.cms).findOne({});
-    if (!doc) {
-      const { _id, ...defaults } = DEFAULT_CMS;
-      await db.collection(COLLECTIONS.cms).insertOne(defaults);
-      return DEFAULT_CMS;
-    }
-    const { _id, ...rest } = doc;
-    return { ...DEFAULT_CMS, ...rest };
-  } catch {
-    return DEFAULT_CMS;
-  }
+  return cache.getOrSet(
+    CMS_CACHE_KEY,
+    async () => {
+      try {
+        const db = await getDb();
+        const doc = await db.collection<CMSContent>(COLLECTIONS.cms).findOne({});
+        if (!doc) {
+          const { _id, ...defaults } = DEFAULT_CMS;
+          await db.collection(COLLECTIONS.cms).insertOne(defaults);
+          return DEFAULT_CMS;
+        }
+        const { _id, ...rest } = doc;
+        return { ...DEFAULT_CMS, ...rest };
+      } catch {
+        return DEFAULT_CMS;
+      }
+    },
+    CACHE_TTL_SECONDS
+  );
 }
 
 export async function updateCmsSettings(patch: Partial<CMSContent>): Promise<CMSContent> {
@@ -142,5 +201,6 @@ export async function updateCmsSettings(patch: Partial<CMSContent>): Promise<CMS
     { $set: patch },
     { upsert: true }
   );
+  cache.delete(CMS_CACHE_KEY);
   return getCmsSettings();
 }

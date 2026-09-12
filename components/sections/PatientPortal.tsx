@@ -7,7 +7,7 @@ import AppointmentBookingView from './AppointmentBookingView';
 
 export default function PatientPortal() {
   return (
-    <section className="relative py-20 sm:py-28 overflow-hidden bg-surface" id="patient-portal">
+    <section className="relative py-8 sm:py-16 overflow-hidden bg-surface" id="patient-portal">
       {/* Premium Glassmorphic Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[100px]" />

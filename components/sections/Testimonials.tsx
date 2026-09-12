@@ -62,7 +62,7 @@ export default function Testimonials({ cms }: TestimonialsProps) {
   }, [reviews.length, hovered]);
 
   return (
-    <section id="testimonials" className="py-12 sm:py-16 bg-stone-50 select-none overflow-hidden relative border-t border-b border-gray-200">
+    <section id="testimonials" className="py-6 sm:py-12 bg-stone-50 select-none overflow-hidden relative border-t border-b border-gray-200">
 
       {/* Decorative Background Accent */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/5 rounded-full filter blur-3xl pointer-events-none" />
@@ -70,7 +70,7 @@ export default function Testimonials({ cms }: TestimonialsProps) {
       <div className="relative z-10">
 
         {/* Section Header */}
-        <div className="mb-12 text-center px-4">
+        <div className="mb-6 sm:mb-10 text-center px-4">
           <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary font-sans text-xs font-bold uppercase tracking-wider mb-3">
             <Sparkles className="w-3.5 h-3.5 mr-1 text-teal-600" />
             Verified Case Reviews

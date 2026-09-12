@@ -22,6 +22,7 @@ interface AppointmentsListProps {
   ) => Promise<{ whatsappUrl?: string } | void> | void;
   onRefresh: () => void;
   role?: 'staff' | 'doctor';
+  initialFilter?: FilterType;
 }
 
 type FilterType = 'all' | 'online' | 'offline' | 'paid' | 'pending' | 'today' | 'upcoming' | 'cancelled' | 'completed' | 'skipped' | 'approval';
@@ -32,9 +33,30 @@ export default function AppointmentsList({
   onAction,
   onRefresh,
   role = 'doctor',
+  initialFilter = 'all',
 }: AppointmentsListProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [patientTypeFilter, setPatientTypeFilter] = useState<'all' | 'offline' | 'online'>(() => {
+    if (initialFilter === 'online') return 'online';
+    if (initialFilter === 'offline') return 'offline';
+    return 'all';
+  });
+  const [statusFilter, setStatusFilter] = useState<FilterType>(() => {
+    if (initialFilter === 'online' || initialFilter === 'offline') return 'all';
+    return initialFilter;
+  });
+
+  React.useEffect(() => {
+    if (initialFilter === 'online') {
+      setPatientTypeFilter('online');
+      setStatusFilter('all');
+    } else if (initialFilter === 'offline') {
+      setPatientTypeFilter('offline');
+      setStatusFilter('all');
+    } else if (initialFilter) {
+      setStatusFilter(initialFilter);
+    }
+  }, [initialFilter]);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -215,7 +237,7 @@ export default function AppointmentsList({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Apply filters and searches
+  // Apply dual-tier filters and search query
   const filteredBookings = bookings.filter((bk) => {
     // 1. Search Query Match
     const query = searchQuery.toLowerCase().trim();
@@ -232,19 +254,21 @@ export default function AppointmentsList({
       }
     }
 
-    // 2. Tab Filter Match
-    switch (activeFilter) {
+    // 2. Patient Type Selector (Offline vs Online)
+    if (patientTypeFilter === 'online') {
+      if (bk.bookingType !== 'online' || bk.source === 'walk-in') return false;
+    } else if (patientTypeFilter === 'offline') {
+      if (bk.bookingType === 'online' && bk.source !== 'walk-in') return false;
+    }
+
+    // 3. Status & Payment Sub-Filter Match
+    switch (statusFilter) {
       case 'approval':
-        // Pending admin approval — online bookings awaiting confirmation
         return bk.status === 'pending';
       case 'today':
         return bk.date === todayStr;
       case 'upcoming':
         return bk.date > todayStr && bk.status !== 'cancelled' && bk.status !== 'completed';
-      case 'online':
-        return bk.bookingType === 'online' && bk.source !== 'walk-in';
-      case 'offline':
-        return bk.bookingType !== 'online' || bk.source === 'walk-in';
       case 'paid':
         return bk.paymentStatus === 'paid';
       case 'pending':
@@ -260,27 +284,31 @@ export default function AppointmentsList({
     }
   });
 
-  // Count bookings by category for badge
+  // Count bookings for badges
+  const onlineTotalCount = bookings.filter(bk => bk.bookingType === 'online' && bk.source !== 'walk-in').length;
+  const offlineTotalCount = bookings.filter(bk => bk.bookingType !== 'online' || bk.source === 'walk-in').length;
   const pendingApprovalCount = bookings.filter(bk => bk.status === 'pending').length;
   const skippedTotalCount = bookings.filter(bk => bk.status === 'no-show' || bk.status === 'No Show' || (bk as any).status === 'skipped').length;
   const completedTotalCount = bookings.filter(bk => bk.status === 'completed').length;
+  const paidTotalCount = bookings.filter(bk => bk.paymentStatus === 'paid').length;
+  const pendingPaymentCount = bookings.filter(bk => bk.paymentStatus === 'pending' || bk.paymentStatus === 'unpaid').length;
 
   const getPaymentBadge = (status?: PaymentStatus) => {
     const s = String(status || '').toLowerCase();
     switch (s) {
       case 'paid':
-        return <span className="px-2 py-0.5 rounded bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">Paid</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-700 text-[10px] font-black uppercase tracking-wider shadow-2xs">Paid</span>;
       case 'pending':
-        return <span className="px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-800 text-[10px] font-bold uppercase tracking-wider">Pending</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-700 text-[10px] font-black uppercase tracking-wider shadow-2xs">Pending</span>;
       case 'failed':
-        return <span className="px-2 py-0.5 rounded bg-rose-100 border border-rose-300 text-rose-800 text-[10px] font-bold uppercase tracking-wider">Failed</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-rose-50 border border-rose-300 text-rose-700 text-[10px] font-black uppercase tracking-wider shadow-2xs">Failed</span>;
       case 'refunded':
-        return <span className="px-2 py-0.5 rounded bg-blue-150 border border-blue-300 text-blue-850 text-[10px] font-bold uppercase tracking-wider">Refunded</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-blue-50 border border-blue-300 text-blue-800 text-[10px] font-black uppercase tracking-wider shadow-2xs">Refunded</span>;
       case 'partial refund':
       case 'partial_refund':
-        return <span className="px-2 py-0.5 rounded bg-indigo-100 border border-indigo-300 text-indigo-800 text-[10px] font-bold uppercase tracking-wider">Partial Refund</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-300 text-indigo-800 text-[10px] font-black uppercase tracking-wider shadow-2xs">Partial Refund</span>;
       default:
-        return <span className="px-2 py-0.5 rounded bg-gray-100 border border-gray-300 text-gray-600 text-[10px] font-bold uppercase tracking-wider">Unpaid</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-600 text-[10px] font-black uppercase tracking-wider shadow-2xs">Unpaid</span>;
     }
   };
 
@@ -288,27 +316,27 @@ export default function AppointmentsList({
     const s = String(status || '').toLowerCase();
     switch (s) {
       case 'confirmed':
-        return <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase">Confirmed</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-250 text-[10px] font-black uppercase tracking-wider">Confirmed</span>;
       case 'booked':
-        return <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold uppercase">Booked</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-250 text-[10px] font-black uppercase tracking-wider">Booked</span>;
       case 'checked-in':
       case 'checked in':
       case 'arrived':
-        return <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold uppercase">Checked In</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-250 text-[10px] font-black uppercase tracking-wider">Checked In</span>;
       case 'completed':
-        return <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-bold uppercase">Completed</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-250 text-[10px] font-black uppercase tracking-wider">Completed</span>;
       case 'cancelled':
-        return <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold uppercase">Cancelled</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-250 text-[10px] font-black uppercase tracking-wider">Cancelled</span>;
       case 'no-show':
       case 'no show':
-        return <span className="px-2 py-0.5 rounded bg-gray-150 text-gray-700 border border-gray-200 text-[10px] font-bold uppercase">No Show</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-300 text-[10px] font-black uppercase tracking-wider">No Show</span>;
       default:
-        return <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold uppercase">Pending</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-250 text-[10px] font-black uppercase tracking-wider">Pending</span>;
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-6">
+    <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-sm space-y-6">
 
       {/* ── WhatsApp Notification Modal ── */}
       {whatsappModal && (
@@ -414,44 +442,59 @@ export default function AppointmentsList({
       )}
 
       {/* Top Title & Search bar row */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-100">
         <div>
-          <h3 className="font-playfair text-lg sm:text-xl font-black text-gray-900">OPD Registrations</h3>
-          <p className="text-[11px] text-gray-500 font-semibold">Triage bookings, update check-ins, and check payment status</p>
+          <div className="flex items-center gap-2">
+            <h3 className="font-playfair text-lg sm:text-xl font-black text-slate-900">
+              {patientTypeFilter === 'online'
+                ? '🌐 Online Tele-Consultation Patients'
+                : patientTypeFilter === 'offline'
+                ? '🏥 Offline Clinic OPD Patients'
+                : '📋 Patient Consultation & OPD Records'}
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">
+              {filteredBookings.length} {filteredBookings.length === 1 ? 'record' : 'records'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Manage registrations, video links, check-ins, prescriptions, and payment status
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-              <Search className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="relative flex-1 sm:w-64 min-w-[200px]">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <Search className="w-4 h-4" />
             </span>
             <input
               type="text"
-              placeholder="Search ID, Name, Phone..."
+              placeholder="Search Name, Phone, ID..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-9 pr-4 py-2 border rounded-xl text-xs font-semibold w-full sm:w-60 focus:outline-none focus:border-primary"
+              className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 w-full focus:bg-white focus:outline-none focus:border-[#1B4F72] transition-colors"
             />
           </div>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
               onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'table' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              title="Table List View"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                viewMode === 'table' ? 'bg-white text-[#0B1B29] shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+              title="Table View"
             >
-              <List className="w-3.5 h-3.5" /> Table List
+              <List className="w-3.5 h-3.5" /> Table
             </button>
             <button
               onClick={() => setViewMode('cards')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'cards' ? 'bg-white text-primary shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              title="Grid Cards View"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                viewMode === 'cards' ? 'bg-white text-[#0B1B29] shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+              title="Cards View"
             >
               <LayoutGrid className="w-3.5 h-3.5" /> Cards
             </button>
@@ -460,61 +503,152 @@ export default function AppointmentsList({
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="text-xs font-bold bg-gray-50 text-primary border rounded-xl px-3 py-2 hover:bg-gray-100 transition-colors"
+            className="text-xs font-extrabold bg-slate-100 text-slate-700 border border-slate-200 rounded-xl px-3 py-2 hover:bg-slate-200 transition-colors flex items-center gap-1.5"
           >
-            {loading ? '...' : 'Refresh'}
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#1B4F72]' : ''}`} />
+            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
 
-      {/* Filter Tabs Panel */}
-      <div className="flex flex-wrap gap-1.5 border-b pb-4">
-        {/* Pending Approval tab — shown first & highlighted */}
-        <button
-          onClick={() => {
-            setActiveFilter('approval');
-            setCurrentPage(1);
-          }}
-          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${activeFilter === 'approval'
-            ? 'bg-amber-500 border-amber-500 text-white'
-            : 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
-            }`}
-        >
-          ⏳ Pending Approval
-          {pendingApprovalCount > 0 && (
-            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${activeFilter === 'approval' ? 'bg-white text-amber-600' : 'bg-amber-500 text-white'
-              }`}>
-              {pendingApprovalCount}
-            </span>
-          )}
-        </button>
-
-        {[
-          { id: 'today', label: "Today's" },
-          { id: 'upcoming', label: 'Upcoming' },
-          { id: 'completed', label: `Completed (${completedTotalCount})` },
-          { id: 'skipped', label: `Skipped (${skippedTotalCount})` },
-          { id: 'cancelled', label: 'Cancelled' },
-          { id: 'online', label: 'Online Consultation' },
-          { id: 'offline', label: 'Offline Consultation' },
-          { id: 'paid', label: 'Paid' },
-          { id: 'pending', label: 'Pending Payment' },
-          { id: 'all', label: 'All Records' },
-        ].map((f) => (
-          <button
-            key={f.id}
-            onClick={() => {
-              setActiveFilter(f.id as FilterType);
-              setCurrentPage(1);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${activeFilter === f.id
-              ? 'bg-[#1B4F72] border-[#1B4F72] text-white'
-              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+      {/* ── 2-TIER REDESIGNED FILTER CONTROL AREA ── */}
+      <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80">
+        
+        {/* TIER 1: PRIMARY PATIENT CONSULTATION TYPE SELECTOR */}
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-0.5">
+            Patient Consultation Category
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* ALL PATIENTS */}
+            <button
+              type="button"
+              onClick={() => {
+                setPatientTypeFilter('all');
+                setCurrentPage(1);
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-between transition-all cursor-pointer border ${
+                patientTypeFilter === 'all'
+                  ? 'bg-[#0B1B29] text-white border-[#0B1B29] shadow-md'
+                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               }`}
-          >
-            {f.label}
-          </button>
-        ))}
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-base">👥</span>
+                <span>ALL PATIENTS</span>
+              </span>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                patientTypeFilter === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {bookings.length}
+              </span>
+            </button>
+
+            {/* OFFLINE / CLINIC PATIENTS */}
+            <button
+              type="button"
+              onClick={() => {
+                setPatientTypeFilter('offline');
+                setCurrentPage(1);
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-between transition-all cursor-pointer border ${
+                patientTypeFilter === 'offline'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-600 shadow-md'
+                  : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-50/60'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-base">🏥</span>
+                <span>OFFLINE / CLINIC</span>
+              </span>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                patientTypeFilter === 'offline' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                {offlineTotalCount}
+              </span>
+            </button>
+
+            {/* ONLINE / TELE-CONSULT PATIENTS */}
+            <button
+              type="button"
+              onClick={() => {
+                setPatientTypeFilter('online');
+                setCurrentPage(1);
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-between transition-all cursor-pointer border ${
+                patientTypeFilter === 'online'
+                  ? 'bg-gradient-to-r from-sky-600 to-blue-700 text-white border-sky-600 shadow-md'
+                  : 'bg-white text-sky-800 border-sky-200 hover:bg-sky-50/60'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-base">🌐</span>
+                <span>ONLINE / TELE-CONSULT</span>
+              </span>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                patientTypeFilter === 'online' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'
+              }`}>
+                {onlineTotalCount}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* TIER 2: STATUS & PAYMENT SUB-FILTERS */}
+        <div className="pt-2 border-t border-slate-200/60">
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 px-0.5">
+            Filter Status & Payment
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {/* Pending Approval */}
+            <button
+              onClick={() => {
+                setStatusFilter('approval');
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === 'approval'
+                  ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
+                  : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+              }`}
+            >
+              ⏳ Pending Approval
+              {pendingApprovalCount > 0 && (
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                  statusFilter === 'approval' ? 'bg-white text-amber-600' : 'bg-amber-500 text-white'
+                }`}>
+                  {pendingApprovalCount}
+                </span>
+              )}
+            </button>
+
+            {[
+              { id: 'all', label: 'All Statuses' },
+              { id: 'today', label: "Today's" },
+              { id: 'upcoming', label: 'Upcoming' },
+              { id: 'paid', label: `Paid (${paidTotalCount})` },
+              { id: 'pending', label: `Pending Payment (${pendingPaymentCount})` },
+              { id: 'completed', label: `Completed (${completedTotalCount})` },
+              { id: 'skipped', label: `Skipped (${skippedTotalCount})` },
+              { id: 'cancelled', label: 'Cancelled' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => {
+                  setStatusFilter(f.id as FilterType);
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                  statusFilter === f.id
+                    ? 'bg-[#1B4F72] border-[#1B4F72] text-white shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Bookings List mapping */}
@@ -636,79 +770,85 @@ export default function AppointmentsList({
                                   </button>
                                 )}
                                 {bk.status === 'confirmed' && bk.bookingType === 'online' && String(bk.paymentStatus || '').toLowerCase() === 'paid' && bk.meetingLink && (
-                                  <>
-                                    <a
-                                      href={bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net')}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="px-2.5 py-1 bg-blue-650 hover:bg-blue-750 text-white rounded-lg text-[10px] font-bold uppercase inline-block text-center"
-                                      title="Join Video Meeting"
-                                    >
-                                      Join Meeting
-                                    </a>
-                                    <button
-                                      onClick={async () => {
-                                        const clinicName = 'Skin Hub Clinic';
-                                        const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
-                                        const msg = `*🌟 ${clinicName} — Online Video Consultation Link 🎥*\n\nNamaste *${bk.name}*! 🙏\n\nAapki payment successfully receive ho gayi hai aur aapka slot confirm ho gaya hai.\n\n💻 *Video Call details:*\n• *Time:* ${bk.time}\n• *Date:* ${bk.date}\n• *Meeting Link:* ${finalLink}\n${bk.meetingPassword ? `• *Meeting Password:* ${bk.meetingPassword}\n` : ''}\nKripya scheduled time se 5 min pehle link par click karke join karein.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad! 🙏`;
-                                        const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
-                                        window.open(waUrl, '_blank');
-                                        try {
-                                          await onAction(bk.id, 'mark-link-sent');
-                                          onRefresh();
-                                        } catch (err) {
-                                          console.error('Failed to mark link as sent:', err);
-                                        }
-                                      }}
-                                      className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
-                                      title={bk.phone ? "Send Video Link via WhatsApp" : "No WhatsApp number provided"}
-                                    >
-                                      {bk.phone ? 'Send Link' : 'No WA'}
-                                    </button>
-                                    <button
-                                      onClick={async () => {
-                                        let email = bk.email;
-                                        if (!email || !email.includes('@')) {
-                                          const entered = prompt(`Patient ${bk.name} has no email registered. Please enter an email address to send video consultation link:`);
-                                          if (!entered || !entered.includes('@')) return;
-                                          email = entered.trim();
-                                        }
-                                        const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
-                                        try {
-                                          const res = await fetch('/api/communication/send-email', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                              to: email,
-                                              patientName: bk.name,
-                                              type: 'meeting-link',
-                                              appointmentId: bk.id,
-                                              date: bk.date,
-                                              time: bk.time,
-                                              meetingUrl: finalLink
-                                            })
-                                          });
-                                          if (res.ok) {
-                                            alert(`✉️ Video consultation link successfully emailed to ${email}!`);
-                                            try {
-                                              await onAction(bk.id, 'mark-link-sent');
-                                              onRefresh();
-                                            } catch {}
-                                          } else {
-                                            const d = await res.json().catch(() => ({}));
-                                            alert(d.error || 'Failed to send email.');
+                                  role === 'doctor' ? (
+                                    <>
+                                      <a
+                                        href={bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net')}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2.5 py-1 bg-blue-650 hover:bg-blue-750 text-white rounded-lg text-[10px] font-bold uppercase inline-block text-center"
+                                        title="Join Video Meeting"
+                                      >
+                                        Join Meeting
+                                      </a>
+                                      <button
+                                        onClick={async () => {
+                                          const clinicName = 'Skin Hub Clinic';
+                                          const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
+                                          const msg = `*🌟 ${clinicName} — Online Video Consultation Link 🎥*\n\nNamaste *${bk.name}*! 🙏\n\nAapki payment successfully receive ho gayi hai aur aapka slot confirm ho gaya hai.\n\n💻 *Video Call details:*\n• *Time:* ${bk.time}\n• *Date:* ${bk.date}\n• *Meeting Link:* ${finalLink}\n${bk.meetingPassword ? `• *Meeting Password:* ${bk.meetingPassword}\n` : ''}\nKripya scheduled time se 5 min pehle link par click karke join karein.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad! 🙏`;
+                                          const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                                          window.open(waUrl, '_blank');
+                                          try {
+                                            await onAction(bk.id, 'mark-link-sent');
+                                            onRefresh();
+                                          } catch (err) {
+                                            console.error('Failed to mark link as sent:', err);
                                           }
-                                        } catch (e) {
-                                          console.error(e);
-                                          alert('Error sending email.');
-                                        }
-                                      }}
-                                      className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
-                                      title={bk.email ? `Send Video Link via Email (${bk.email})` : "Send Video Link via Email"}
-                                    >
-                                      <Mail className="w-3 h-3" /> Email Link
-                                    </button>
-                                  </>
+                                        }}
+                                        className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
+                                        title={bk.phone ? "Send Video Link via WhatsApp" : "No WhatsApp number provided"}
+                                      >
+                                        {bk.phone ? 'Send Link' : 'No WA'}
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          let email = bk.email;
+                                          if (!email || !email.includes('@')) {
+                                            const entered = prompt(`Patient ${bk.name} has no email registered. Please enter an email address to send video consultation link:`);
+                                            if (!entered || !entered.includes('@')) return;
+                                            email = entered.trim();
+                                          }
+                                          const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
+                                          try {
+                                            const res = await fetch('/api/communication/send-email', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({
+                                                to: email,
+                                                patientName: bk.name,
+                                                type: 'meeting-link',
+                                                appointmentId: bk.id,
+                                                date: bk.date,
+                                                time: bk.time,
+                                                meetingUrl: finalLink
+                                              })
+                                            });
+                                            if (res.ok) {
+                                              alert(`✉️ Video consultation link successfully emailed to ${email}!`);
+                                              try {
+                                                await onAction(bk.id, 'mark-link-sent');
+                                                onRefresh();
+                                              } catch {}
+                                            } else {
+                                              const d = await res.json().catch(() => ({}));
+                                              alert(d.error || 'Failed to send email.');
+                                            }
+                                          } catch (e) {
+                                            console.error(e);
+                                            alert('Error sending email.');
+                                          }
+                                        }}
+                                        className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                                        title={bk.email ? `Send Video Link via Email (${bk.email})` : "Send Video Link via Email"}
+                                      >
+                                        <Mail className="w-3 h-3" /> Email Link
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[9px] font-extrabold uppercase">
+                                      📹 Call Managed by Doctor
+                                    </span>
+                                  )
                                 )}
                                 {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online' && bk.meetingLinkSent)) && (
                                   <button
@@ -719,7 +859,7 @@ export default function AppointmentsList({
                                     Complete
                                   </button>
                                 )}
-                                {bk.status === 'completed' && (
+                                {bk.status === 'completed' && role === 'doctor' && (
                                   <button
                                     onClick={() => window.open(`/admin/prescription?patientId=${bk.id}&type=${bk.bookingType === 'online' ? 'telemedicine' : 'clinic'}`, '_blank')}
                                     className="px-2.5 py-1 bg-[#0B1B29] hover:bg-primary text-white rounded-lg text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 transition-colors cursor-pointer"
@@ -1032,10 +1172,10 @@ export default function AppointmentsList({
                         <p className="text-gray-600 font-semibold">
                           {bk.date} at {bk.time} • <span className="text-primary font-bold">{bk.service}</span>
                         </p>
-                        <p className="text-gray-500 font-semibold flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-gray-400" /> {bk.phone}
-                          {bk.email && ` • ${bk.email}`}
-                        </p>
+                        <div className="text-gray-500 font-semibold flex flex-wrap items-center gap-1.5 min-w-0 text-xs">
+                          <span className="flex items-center gap-1 shrink-0"><Phone className="w-3 h-3 text-gray-400" /> {bk.phone}</span>
+                          {bk.email && <span className="text-gray-400 font-normal truncate max-w-[160px] sm:max-w-xs break-all">• {bk.email}</span>}
+                        </div>
 
                         {(bk.age || bk.gender || (role === 'doctor' && bk.skinType) || bk.address) && (
                           <div className="bg-white border border-gray-150 p-2.5 rounded-xl mt-2 space-y-1.5 text-[11px]">
@@ -1145,79 +1285,85 @@ export default function AppointmentsList({
                         </button>
                       )}
                       {bk.status === 'confirmed' && bk.bookingType === 'online' && String(bk.paymentStatus || '').toLowerCase() === 'paid' && bk.meetingLink && (
-                        <>
-                          <a
-                            href={bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net')}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1.5 bg-blue-650 hover:bg-blue-750 text-white rounded-lg text-[10px] font-bold uppercase inline-block text-center"
-                            title="Join Video Meeting"
-                          >
-                            Join Meeting
-                          </a>
-                          <button
-                            onClick={async () => {
-                              const clinicName = 'Skin Hub Clinic';
-                              const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
-                              const msg = `*🌟 ${clinicName} — Online Video Consultation Link 🎥*\n\nNamaste *${bk.name}*! 🙏\n\nAapki payment successfully receive ho gayi hai aur aapka slot confirm ho gaya hai.\n\n💻 *Video Call details:*\n• *Time:* ${bk.time}\n• *Date:* ${bk.date}\n• *Meeting Link:* ${finalLink}\n${bk.meetingPassword ? `• *Meeting Password:* ${bk.meetingPassword}\n` : ''}\nKripya scheduled time se 5 min pehle link par click karke join karein.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad! 🙏`;
-                              const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
-                              window.open(waUrl, '_blank');
-                              try {
-                                await onAction(bk.id, 'mark-link-sent');
-                                onRefresh();
-                              } catch (err) {
-                                console.error('Failed to mark link as sent:', err);
-                              }
-                            }}
-                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
-                            title={bk.phone ? "Send Video Link via WhatsApp" : "No WhatsApp number provided"}
-                          >
-                            {bk.phone ? 'Send Link' : 'No WA'}
-                          </button>
-                          <button
-                            onClick={async () => {
-                              let email = bk.email;
-                              if (!email || !email.includes('@')) {
-                                const entered = prompt(`Patient ${bk.name} has no email registered. Please enter an email address to send video consultation link:`);
-                                if (!entered || !entered.includes('@')) return;
-                                email = entered.trim();
-                              }
-                              const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
-                              try {
-                                const res = await fetch('/api/communication/send-email', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    to: email,
-                                    patientName: bk.name,
-                                    type: 'meeting-link',
-                                    appointmentId: bk.id,
-                                    date: bk.date,
-                                    time: bk.time,
-                                    meetingUrl: finalLink
-                                  })
-                                });
-                                if (res.ok) {
-                                  alert(`✉️ Video consultation link successfully emailed to ${email}!`);
-                                  try {
-                                    await onAction(bk.id, 'mark-link-sent');
-                                    onRefresh();
-                                  } catch {}
-                                } else {
-                                  const d = await res.json().catch(() => ({}));
-                                  alert(d.error || 'Failed to send email.');
+                        role === 'doctor' ? (
+                          <>
+                            <a
+                              href={bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net')}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-blue-650 hover:bg-blue-750 text-white rounded-lg text-[10px] font-bold uppercase inline-block text-center"
+                              title="Join Video Meeting"
+                            >
+                              Join Meeting
+                            </a>
+                            <button
+                              onClick={async () => {
+                                const clinicName = 'Skin Hub Clinic';
+                                const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
+                                const msg = `*🌟 ${clinicName} — Online Video Consultation Link 🎥*\n\nNamaste *${bk.name}*! 🙏\n\nAapki payment successfully receive ho gayi hai aur aapka slot confirm ho gaya hai.\n\n💻 *Video Call details:*\n• *Time:* ${bk.time}\n• *Date:* ${bk.date}\n• *Meeting Link:* ${finalLink}\n${bk.meetingPassword ? `• *Meeting Password:* ${bk.meetingPassword}\n` : ''}\nKripya scheduled time se 5 min pehle link par click karke join karein.\n\nAapki skin health hamari priority hai! 💖\nDhanyawad! 🙏`;
+                                const waUrl = `https://wa.me/${bk.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+                                window.open(waUrl, '_blank');
+                                try {
+                                  await onAction(bk.id, 'mark-link-sent');
+                                  onRefresh();
+                                } catch (err) {
+                                  console.error('Failed to mark link as sent:', err);
                                 }
-                              } catch (e) {
-                                console.error(e);
-                                alert('Error sending email.');
-                              }
-                            }}
-                            className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
-                            title={bk.email ? `Send Video Link via Email (${bk.email})` : "Send Video Link via Email"}
-                          >
-                            <Mail className="w-3.5 h-3.5" /> Email Link
-                          </button>
-                        </>
+                              }}
+                              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold uppercase"
+                              title={bk.phone ? "Send Video Link via WhatsApp" : "No WhatsApp number provided"}
+                            >
+                              {bk.phone ? 'Send Link' : 'No WA'}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                let email = bk.email;
+                                if (!email || !email.includes('@')) {
+                                  const entered = prompt(`Patient ${bk.name} has no email registered. Please enter an email address to send video consultation link:`);
+                                  if (!entered || !entered.includes('@')) return;
+                                  email = entered.trim();
+                                }
+                                const finalLink = bk.meetingLink?.replace('meet.jit.si', 'meet.ffmuc.net');
+                                try {
+                                  const res = await fetch('/api/communication/send-email', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      to: email,
+                                      patientName: bk.name,
+                                      type: 'meeting-link',
+                                      appointmentId: bk.id,
+                                      date: bk.date,
+                                      time: bk.time,
+                                      meetingUrl: finalLink
+                                    })
+                                  });
+                                  if (res.ok) {
+                                    alert(`✉️ Video consultation link successfully emailed to ${email}!`);
+                                    try {
+                                      await onAction(bk.id, 'mark-link-sent');
+                                      onRefresh();
+                                    } catch {}
+                                  } else {
+                                    const d = await res.json().catch(() => ({}));
+                                    alert(d.error || 'Failed to send email.');
+                                  }
+                                } catch (e) {
+                                  console.error(e);
+                                  alert('Error sending email.');
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                              title={bk.email ? `Send Video Link via Email (${bk.email})` : "Send Video Link via Email"}
+                            >
+                              <Mail className="w-3.5 h-3.5" /> Email Link
+                            </button>
+                          </>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[10px] font-extrabold uppercase">
+                            📹 Call Managed by Doctor
+                          </span>
+                        )
                       )}
                       {(bk.status === 'checked-in' || bk.status === 'arrived' || (bk.status === 'confirmed' && bk.bookingType === 'online' && bk.meetingLinkSent)) && (
                         <button
@@ -1227,7 +1373,7 @@ export default function AppointmentsList({
                           Complete
                         </button>
                       )}
-                      {bk.status === 'completed' && (
+                      {bk.status === 'completed' && role === 'doctor' && (
                         <button
                           onClick={() => window.open(`/admin/prescription?patientId=${bk.id}&type=${bk.bookingType === 'online' ? 'telemedicine' : 'clinic'}`, '_blank')}
                           className="px-3 py-1.5 bg-[#0B1B29] hover:bg-primary text-white rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer transition-colors"
