@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { uploadToCloudinary } from '@/lib/cloudinary';
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,37 +26,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET;
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
       const buffer = Buffer.from(await file.arrayBuffer());
 
       // 1. Try Cloudinary if credentials exist
-      if (cloudName && uploadPreset) {
-        try {
-          const base64Data = `data:${file.type || 'image/jpeg'};base64,${buffer.toString('base64')}`;
-          const cFormData = new FormData();
-          cFormData.append('file', base64Data);
-          cFormData.append('upload_preset', uploadPreset);
-          cFormData.append('folder', 'skin-hub/uploads');
-
-          const cRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, {
-            method: 'POST',
-            body: cFormData,
-          });
-
-          if (cRes.ok) {
-            const cData = await cRes.json();
-            if (cData.secure_url) {
-              uploadedUrls.push(cData.secure_url);
-              continue;
-            }
-          }
-        } catch (cErr) {
-          console.warn('Cloudinary upload failed, falling back to local/base64 storage:', cErr);
-        }
+      const cloudinaryUrl = await uploadToCloudinary(buffer, file.type || 'image/jpeg', 'skin-hub/uploads');
+      if (cloudinaryUrl) {
+        uploadedUrls.push(cloudinaryUrl);
+        continue;
       }
 
       // 2. Try Local Filesystem
